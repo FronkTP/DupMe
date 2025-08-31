@@ -13,6 +13,8 @@ export default function Home() {
     currentPlayerTurn: string | null;
     currentRound: number;
   };
+  type RoomListItem = { id: string; name: string; capacity: number; count: number };
+  type RoomSnapshot = { id: string; name: string; capacity: number; players: Array<{ id: string; nickname: string | null; score: number }>; };
 
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [myId, setMyId] = useState<string | null>(null);
@@ -20,6 +22,8 @@ export default function Home() {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [nickname, setNickname] = useState<string>("");
   const [hasNick, setHasNick] = useState<boolean>(false);
+  const [rooms, setRooms] = useState<RoomListItem[]>([]);
+  const [room, setRoom] = useState<RoomSnapshot | null>(null);
 
 
   useEffect(() => {
@@ -37,6 +41,11 @@ export default function Home() {
       console.log('Received gameStateUpdate:', newState);
       setGameState(newState);
     });
+
+    newSocket.on('SERVER:ROOMS', (list: RoomListItem[]) => setRooms(list));
+    newSocket.on('SERVER:ROOM', (snapshot: RoomSnapshot) => setRoom(snapshot));
+    newSocket.on('SERVER:JOINED_ROOM', () => {});
+    newSocket.on('SERVER:LEFT_ROOM', () => setRoom(null));
 
     newSocket.on('disconnect', () => {
       console.log('❌ Disconnected from server');
@@ -70,6 +79,21 @@ export default function Home() {
     setHasNick(true);
   };
 
+  const createRoom = (name: string, capacity: number) => {
+    if (!socket) return;
+    socket.emit('ROOMS:CREATE', { name, capacity });
+  };
+
+  const joinRoom = (id: string) => {
+    if (!socket) return;
+    socket.emit('ROOMS:JOIN', id);
+  };
+
+  const leaveRoom = () => {
+    if (!socket) return;
+    socket.emit('ROOMS:LEAVE');
+  };
+
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-12 bg-gray-900 text-white">
       <div className="text-center mb-8">
@@ -95,12 +119,57 @@ export default function Home() {
         </div>
       )}
 
-      {hasNick && gameInProgress ? (
+      {hasNick && room && gameInProgress ? (
         <Piano onKeyClick={handlePianoKeyClick} />
       ) : (
-        <div className="p-8 bg-gray-800 rounded-lg">
-          <p className="text-xl">Waiting for another player to join...</p>
-        </div>
+        hasNick && (
+          <div className="p-8 bg-gray-800 rounded-lg w-full max-w-2xl">
+            {!room ? (
+              <div>
+                <div className="flex items-end gap-3 mb-4">
+                  <div className="flex flex-col gap-2">
+                    <label className="text-sm text-gray-400">Create room</label>
+                    <div className="flex gap-2">
+                      <input id="roomName" placeholder="Room name" className="px-3 py-2 rounded bg-gray-900 border border-gray-700" />
+                      <input id="roomCap" type="number" min={2} max={12} placeholder="Cap" className="w-20 px-3 py-2 rounded bg-gray-900 border border-gray-700" />
+                      <button
+                        className="px-4 py-2 bg-blue-600 rounded"
+                        onClick={() => {
+                          const name = (document.getElementById('roomName') as HTMLInputElement)?.value || '';
+                          const cap = Number((document.getElementById('roomCap') as HTMLInputElement)?.value || 2);
+                          createRoom(name, cap);
+                        }}
+                      >Create</button>
+                    </div>
+                  </div>
+                </div>
+                <p className="mb-2 font-semibold">Available rooms</p>
+                <ul className="space-y-2">
+                  {rooms.length === 0 && <li className="text-gray-400">No rooms yet. Create one!</li>}
+                  {rooms.map(r => (
+                    <li key={r.id} className="flex justify-between items-center bg-gray-900 rounded p-3">
+                      <span>{r.name} — {r.count}/{r.capacity}</span>
+                      <button className="px-3 py-1 bg-green-600 rounded" onClick={() => joinRoom(r.id)}>Join</button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <div>
+                <div className="flex justify-between items-center mb-3">
+                  <p className="font-semibold">Room {room.name} ({room.id}) {room.players.length}/{room.capacity}</p>
+                  <button onClick={leaveRoom} className="px-3 py-1 bg-red-600 rounded">Leave</button>
+                </div>
+                <ul className="text-sm text-gray-300 space-y-1 mb-4">
+                  {room.players.map(p => (
+                    <li key={p.id} className="flex justify-between"><span>{p.nickname || p.id.slice(0,4)}</span><span>score: {p.score}</span></li>
+                  ))}
+                </ul>
+                <p className="text-gray-400">Game controls will appear here after we add ready-up and timers.</p>
+              </div>
+            )}
+          </div>
+        )
       )}
 
       {gameState && gameState.currentPattern.length > 0 && (

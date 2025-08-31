@@ -35,6 +35,30 @@ const resetGame = (preservePlayers = false) => {
   };
 };
 
+// Minimal in-memory rooms (prototype)
+const rooms = {}; // { [roomId]: { id, name, capacity, players: { [socketId]: true } } }
+
+const generateRoomId = () => Math.random().toString(36).slice(2, 6).toUpperCase();
+
+const listRooms = () => Object.values(rooms).map((r) => ({
+  id: r.id,
+  name: r.name,
+  capacity: r.capacity,
+  count: Object.keys(r.players).length,
+}));
+
+const getRoomSnapshot = (roomId) => {
+  const room = rooms[roomId];
+  if (!room) return null;
+  const players = Object.keys(room.players).map((sid) => {
+    const p = gameState.players[sid];
+    return p ? { id: p.id, nickname: p.nickname, score: p.score } : { id: sid, nickname: null, score: 0 };
+  });
+  return { id: room.id, name: room.name, capacity: room.capacity, players };
+};
+
+const broadcastRooms = () => io.emit('SERVER:ROOMS', listRooms());
+
 const broadcastGameState = () => {
   io.emit('gameStateUpdate', gameState);
   console.log('--- Game State Broadcast jaade bhaiye 😎 ---');
@@ -46,14 +70,6 @@ io.on('connection', (socket) => {
   console.log(`✅ A user is trying to connect: ${socket.id}`);
 
 
-  if (Object.keys(gameState.players).length >= 2) {
-    console.log(`🚨 Game is full. Rejecting connection for ${socket.id}`);
-    socket.emit('SERVER:GAME_FULL', 'Sorry, the game is already in progress.');
-    socket.disconnect(true); 
-    return; 
-  }
-
-  // If the game is not full, proceed with adding the player.
   console.log(`Connection accepted for ${socket.id}`);
   gameState.players[socket.id] = {
     id: socket.id,
@@ -61,14 +77,10 @@ io.on('connection', (socket) => {
     nickname: null,
   };
 
-  if (Object.keys(gameState.players).length === 2 && gameState.gameStatus === 'WAITING') {
-    gameState.gameStatus = 'CREATING_PATTERN';
-    const playerIds = Object.keys(gameState.players);
-    gameState.currentPlayerTurn = playerIds[Math.floor(Math.random() * playerIds.length)];
-    console.log(`Game starting! First player is ${gameState.currentPlayerTurn}`);
-  }
-
   broadcastGameState();
+  // Send current rooms list to newcomer and everyone
+  socket.emit('SERVER:ROOMS', listRooms());
+  broadcastRooms();
 
   // Set nickname for this socket
   socket.on('CLIENT:SET_NICKNAME', (nickname) => {
@@ -87,8 +99,22 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Rooms: create / join / leave
+  socket.on('ROOMS:CREATE', ({ name, capacity } = {}) => {
+    const id = generateRoomId();
+    const cap = Math.max(2, Math.min(12, Number(capacity) || 2));
+    rooms[id] = { id, name: String(name || `Room ${id}`), capacity: cap, players: {} };
+    broadcastRooms();
+    joinRoom(socket, id);
+  });
+
+  socket.on('ROOMS:JOIN', (roomId) => joinRoom(socket, String(roomId || '')));
+  socket.on('ROOMS:LEAVE', () => leaveRoom(socket));
+
   socket.on('disconnect', () => {
     console.log(`❌ A user disconnected: ${socket.id}`);
+    // Leave any joined room first
+    leaveRoom(socket);
 
     if (!gameState.players[socket.id]) {
       return; 
@@ -105,6 +131,43 @@ io.on('connection', (socket) => {
     broadcastGameState();
   });
 });
+
+// Helpers for room membership
+function joinRoom(socket, roomId) {
+  const room = rooms[roomId];
+  if (!room) return;
+  if (Object.keys(room.players).length >= room.capacity) {
+    socket.emit('SERVER:ROOM_FULL', roomId);
+    return;
+  }
+  // Leave previous room if any
+  if (socket.data?.roomId && socket.data.roomId !== roomId) {
+    leaveRoom(socket);
+  }
+  room.players[socket.id] = true;
+  socket.data = { ...(socket.data || {}), roomId };
+  socket.join(roomId);
+  io.to(roomId).emit('SERVER:ROOM', getRoomSnapshot(roomId));
+  broadcastRooms();
+  socket.emit('SERVER:JOINED_ROOM', roomId);
+}
+
+function leaveRoom(socket) {
+  const roomId = socket.data?.roomId;
+  if (!roomId) return;
+  const room = rooms[roomId];
+  if (!room) { socket.data.roomId = null; return; }
+  delete room.players[socket.id];
+  socket.leave(roomId);
+  socket.data.roomId = null;
+  if (Object.keys(room.players).length === 0) {
+    delete rooms[roomId];
+  } else {
+    io.to(roomId).emit('SERVER:ROOM', getRoomSnapshot(roomId));
+  }
+  broadcastRooms();
+  socket.emit('SERVER:LEFT_ROOM');
+}
 
 server.listen(PORT, () => {
   console.log(`🚀 Server is running and listening on port ${PORT}`);
