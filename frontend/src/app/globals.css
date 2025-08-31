@@ -1,0 +1,12 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: var(--color-neutral-900);
+}
+
+/* Base reset for full-viewport layout */
+html,
+body,
+:root {
+  height: 100%;
+}
