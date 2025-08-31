@@ -36,7 +36,7 @@ const resetGame = (preservePlayers = false) => {
 };
 
 // Minimal in-memory rooms (prototype)
-const rooms = {}; // { [roomId]: { id, name, capacity, players: { [socketId]: true } } }
+const rooms = {}; // { [roomId]: { id, name, capacity, players: { [socketId]: true }, ready: { [socketId]: true } } }
 
 const generateRoomId = () => Math.random().toString(36).slice(2, 6).toUpperCase();
 
@@ -54,7 +54,8 @@ const getRoomSnapshot = (roomId) => {
     const p = gameState.players[sid];
     return p ? { id: p.id, nickname: p.nickname, score: p.score } : { id: sid, nickname: null, score: 0 };
   });
-  return { id: room.id, name: room.name, capacity: room.capacity, players };
+  const ready = Object.keys(room.ready || {}).filter((sid) => room.ready[sid]);
+  return { id: room.id, name: room.name, capacity: room.capacity, players, ready };
 };
 
 const broadcastRooms = () => io.emit('SERVER:ROOMS', listRooms());
@@ -103,7 +104,7 @@ io.on('connection', (socket) => {
   socket.on('ROOMS:CREATE', ({ name, capacity } = {}) => {
     const id = generateRoomId();
     const cap = Math.max(2, Math.min(12, Number(capacity) || 2));
-    rooms[id] = { id, name: String(name || `Room ${id}`), capacity: cap, players: {} };
+    rooms[id] = { id, name: String(name || `Room ${id}`), capacity: cap, players: {}, ready: {} };
     broadcastRooms();
     joinRoom(socket, id);
   });
@@ -129,6 +130,17 @@ io.on('connection', (socket) => {
     }
 
     broadcastGameState();
+  });
+  
+  // Ready / Unready in a room
+  socket.on('ROOMS:READY', (isReady) => {
+    const roomId = socket.data?.roomId;
+    if (!roomId) return;
+    const room = rooms[roomId];
+    if (!room) return;
+    room.ready = room.ready || {};
+    if (isReady) room.ready[socket.id] = true; else delete room.ready[socket.id];
+    io.to(roomId).emit('SERVER:ROOM', getRoomSnapshot(roomId));
   });
 });
 

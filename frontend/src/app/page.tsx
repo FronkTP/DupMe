@@ -14,7 +14,7 @@ export default function Home() {
     currentRound: number;
   };
   type RoomListItem = { id: string; name: string; capacity: number; count: number };
-  type RoomSnapshot = { id: string; name: string; capacity: number; players: Array<{ id: string; nickname: string | null; score: number }>; };
+  type RoomSnapshot = { id: string; name: string; capacity: number; players: Array<{ id: string; nickname: string | null; score: number }>; ready?: string[] };
 
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [myId, setMyId] = useState<string | null>(null);
@@ -162,10 +162,19 @@ export default function Home() {
                 </div>
                 <ul className="text-sm text-gray-300 space-y-1 mb-4">
                   {room.players.map(p => (
-                    <li key={p.id} className="flex justify-between"><span>{p.nickname || p.id.slice(0,4)}</span><span>score: {p.score}</span></li>
+                    <li key={p.id} className="flex justify-between">
+                      <span>{p.nickname || p.id.slice(0,4)}</span>
+                      <span className="flex gap-3 items-center">
+                        <span className="text-gray-500">score: {p.score}</span>
+                        {room.ready?.includes(p.id) && <span className="text-green-500">ready</span>}
+                      </span>
+                    </li>
                   ))}
                 </ul>
-                <p className="text-gray-400">Game controls will appear here after we add ready-up and timers.</p>
+                <div className="flex gap-2">
+                  <button className="px-3 py-2 bg-green-600 rounded" onClick={() => socket?.emit('ROOMS:READY', true)}>Ready</button>
+                  <button className="px-3 py-2 bg-gray-600 rounded" onClick={() => socket?.emit('ROOMS:READY', false)}>Unready</button>
+                </div>
               </div>
             )}
           </div>
