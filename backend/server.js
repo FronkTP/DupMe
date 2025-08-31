@@ -141,6 +141,13 @@ io.on('connection', (socket) => {
     room.ready = room.ready || {};
     if (isReady) room.ready[socket.id] = true; else delete room.ready[socket.id];
     io.to(roomId).emit('SERVER:ROOM', getRoomSnapshot(roomId));
+    // If everyone is ready and at least 2 players, trigger game start for this room
+    const playerCount = Object.keys(room.players).length;
+    const readyCount = Object.keys(room.ready).length;
+    if (playerCount >= 2 && readyCount === playerCount) {
+      io.to(roomId).emit('SERVER:GAME_START', { roomId, at: Date.now() });
+      room.ready = {}; // reset readiness for next round
+    }
   });
 });
 

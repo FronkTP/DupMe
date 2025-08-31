@@ -24,6 +24,7 @@ export default function Home() {
   const [hasNick, setHasNick] = useState<boolean>(false);
   const [rooms, setRooms] = useState<RoomListItem[]>([]);
   const [room, setRoom] = useState<RoomSnapshot | null>(null);
+  const [roomBanner, setRoomBanner] = useState<string>("");
 
 
   useEffect(() => {
@@ -43,12 +44,21 @@ export default function Home() {
     });
 
     newSocket.on('SERVER:ROOMS', (list: RoomListItem[]) => setRooms(list));
-    newSocket.on('SERVER:ROOM', (snapshot: RoomSnapshot) => setRoom(snapshot));
-    newSocket.on('SERVER:JOINED_ROOM', () => {});
-    newSocket.on('SERVER:LEFT_ROOM', () => setRoom(null));
+    newSocket.on('SERVER:ROOM', (snapshot: RoomSnapshot) => {
+      setRoom(snapshot);
+      const readyLen = snapshot.ready?.length ?? 0;
+      const playerLen = snapshot.players.length;
+      if (playerLen < 2 || readyLen !== playerLen) {
+        setRoomBanner("");
+      }
+    });
+    newSocket.on('SERVER:JOINED_ROOM', () => setRoomBanner(""));
+    newSocket.on('SERVER:LEFT_ROOM', () => { setRoom(null); setRoomBanner(""); });
+    newSocket.on('SERVER:GAME_START', () => setRoomBanner('Game starting!'));
 
     newSocket.on('disconnect', () => {
       console.log('❌ Disconnected from server');
+      setRoomBanner("");
     });
 
     // 3. Cleanup: disconnect the socket when the component unmounts
@@ -160,6 +170,9 @@ export default function Home() {
                   <p className="font-semibold">Room {room.name} ({room.id}) {room.players.length}/{room.capacity}</p>
                   <button onClick={leaveRoom} className="px-3 py-1 bg-red-600 rounded">Leave</button>
                 </div>
+                {roomBanner && (
+                  <div className="mb-3 p-2 bg-blue-900 text-blue-200 rounded">{roomBanner}</div>
+                )}
                 <ul className="text-sm text-gray-300 space-y-1 mb-4">
                   {room.players.map(p => (
                     <li key={p.id} className="flex justify-between">
