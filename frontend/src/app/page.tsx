@@ -25,10 +25,11 @@ export default function Home() {
   const [rooms, setRooms] = useState<RoomListItem[]>([]);
   const [room, setRoom] = useState<RoomSnapshot | null>(null);
   const [roomBanner, setRoomBanner] = useState<string>("");
-  const [phase, setPhase] = useState<'idle'|'create'|'replicate'|'ended'|null>(null);
+  const [phase, setPhase] = useState<'idle'|'create'|'replicate'|'ended'|'game_over'|null>(null);
   const [phaseEndsAt, setPhaseEndsAt] = useState<number | null>(null);
   const [creatorId, setCreatorId] = useState<string | null>(null);
   const [replicatePattern, setReplicatePattern] = useState<string[]>([]);
+  const [results, setResults] = useState<Array<{ id: string; nickname: string | null; score: number }> | null>(null);
 
 
   useEffect(() => {
@@ -58,10 +59,10 @@ export default function Home() {
     });
     newSocket.on('SERVER:JOINED_ROOM', () => setRoomBanner(""));
     newSocket.on('SERVER:LEFT_ROOM', () => { setRoom(null); setRoomBanner(""); });
-    type GameStartPayload = { roomId: string; creatorId?: string; phase?: 'create'; endsAt?: number };
-    type PhasePayload = { roomId: string; phase?: 'create'|'replicate'|'ended'; creatorId?: string; endsAt?: number; pattern?: string[] };
+    type GameStartPayload = { roomId: string; creatorId?: string; phase?: 'create'; endsAt?: number; roundIndex?: number; totalRounds?: number };
+    type PhasePayload = { roomId: string; phase?: 'create'|'replicate'|'ended'|'game_over'; creatorId?: string; endsAt?: number; pattern?: string[]; results?: Array<{ id: string; nickname: string | null; score: number }>} ;
     newSocket.on('SERVER:GAME_START', (p: GameStartPayload) => {
-      setRoomBanner('Create phase: start playing notes');
+      setRoomBanner(`Round ${((p?.roundIndex ?? 0) + 1)}/${p?.totalRounds ?? ''} • Create phase: start playing notes`);
       setPhase('create');
       setPhaseEndsAt(p?.endsAt ?? null);
       setCreatorId(p?.creatorId ?? null);
@@ -74,7 +75,12 @@ export default function Home() {
       if (p?.phase === 'replicate') setRoomBanner('Replicate phase: match the pattern');
       if (p?.phase === 'ended') setRoomBanner('Round ended');
       if (p?.phase === 'replicate') setReplicatePattern(p?.pattern || []);
-      if (p?.phase === 'ended') setReplicatePattern([]);
+      if (p?.phase === 'ended') { setReplicatePattern([]); if (p?.results) setResults(p.results); }
+    });
+    newSocket.on('SERVER:GAME_END', (payload: { roomId: string; results: Array<{ id: string; nickname: string | null; score: number }> }) => {
+      setPhase('game_over');
+      setResults(payload.results || []);
+      setRoomBanner('Game over');
     });
     newSocket.on('SERVER:PATTERN', (payload: { roomId: string; pattern: string[] }) => {
       if (!payload?.pattern) return;
@@ -220,6 +226,20 @@ export default function Home() {
                   <div className="mt-3 p-3 bg-gray-900 rounded border border-gray-700">
                     <p className="text-sm text-gray-400">Pattern:</p>
                     <p className="text-lg tracking-widest">{replicatePattern.join(' ') || '...'}</p>
+                  </div>
+                )}
+                {phase === 'ended' && results && (
+                  <div className="mt-4 p-4 bg-gray-900 rounded border border-gray-700">
+                    <p className="font-semibold mb-2">Round results</p>
+                    <ul className="space-y-1">
+                      {results.sort((a,b)=>b.score-a.score).map(r => (
+                        <li key={r.id} className="flex justify-between">
+                          <span>{r.nickname || r.id.slice(0,4)}</span>
+                          <span className="text-gray-300">{r.score}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="mt-3 text-sm text-gray-400">Click Ready to start another round.</div>
                   </div>
                 )}
               </div>
