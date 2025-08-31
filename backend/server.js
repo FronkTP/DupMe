@@ -58,6 +58,7 @@ io.on('connection', (socket) => {
   gameState.players[socket.id] = {
     id: socket.id,
     score: 0,
+    nickname: null,
   };
 
   if (Object.keys(gameState.players).length === 2 && gameState.gameStatus === 'WAITING') {
@@ -68,6 +69,15 @@ io.on('connection', (socket) => {
   }
 
   broadcastGameState();
+
+  // Set nickname for this socket
+  socket.on('CLIENT:SET_NICKNAME', (nickname) => {
+    const player = gameState.players[socket.id];
+    if (!player) return;
+    const clean = String(nickname || '').trim().slice(0, 20);
+    player.nickname = clean || `Player-${socket.id.slice(0,4)}`;
+    broadcastGameState();
+  });
 
   socket.on('CLIENT:SUBMIT_NOTE', (note) => {
     console.log(`Received note: ${note} from ${socket.id}`);

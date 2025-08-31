@@ -7,7 +7,7 @@ import Piano from './components/Piano';
 export default function Home() {
   type Player = { id: string; score: number };
   type GameState = {
-    players: Record<string, Player>;
+    players: Record<string, Player & { nickname: string | null }>;
     gameStatus: 'WAITING' | 'CREATING_PATTERN' | 'PLAYING' | string;
     currentPattern: string[];
     currentPlayerTurn: string | null;
@@ -18,6 +18,8 @@ export default function Home() {
   const [myId, setMyId] = useState<string | null>(null);
 
   const [socket, setSocket] = useState<Socket | null>(null);
+  const [nickname, setNickname] = useState<string>("");
+  const [hasNick, setHasNick] = useState<boolean>(false);
 
 
   useEffect(() => {
@@ -60,6 +62,14 @@ export default function Home() {
     }
   };
 
+  const submitNickname = () => {
+    if (!socket) return;
+    const clean = nickname.trim();
+    if (!clean) return;
+    socket.emit('CLIENT:SET_NICKNAME', clean);
+    setHasNick(true);
+  };
+
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-12 bg-gray-900 text-white">
       <div className="text-center mb-8">
@@ -70,7 +80,22 @@ export default function Home() {
         <p className="mt-1 text-sm text-gray-500">Your ID: {myId}</p>
       </div>
 
-      {gameInProgress ? (
+      {!hasNick && (
+        <div className="p-4 bg-gray-800 rounded-lg w-full max-w-md">
+          <p className="mb-2">Enter your nickname to continue:</p>
+          <div className="flex gap-2">
+            <input
+              value={nickname}
+              onChange={(e) => setNickname(e.target.value)}
+              className="flex-1 px-3 py-2 rounded bg-gray-900 border border-gray-700 outline-none"
+              placeholder="Nickname"
+            />
+            <button onClick={submitNickname} className="px-4 py-2 bg-blue-600 rounded">Save</button>
+          </div>
+        </div>
+      )}
+
+      {hasNick && gameInProgress ? (
         <Piano onKeyClick={handlePianoKeyClick} />
       ) : (
         <div className="p-8 bg-gray-800 rounded-lg">
@@ -82,6 +107,20 @@ export default function Home() {
           <div className="mt-6 p-4 bg-gray-800 rounded-lg">
               <p>Current Pattern: {gameState.currentPattern.join(', ')}</p>
           </div>
+      )}
+
+      {gameState && (
+        <div className="mt-6 p-4 bg-gray-800 rounded-lg w-full max-w-md">
+          <p className="mb-2 font-semibold">Online users</p>
+          <ul className="text-sm text-gray-300 space-y-1">
+            {Object.values(gameState.players).map((p) => (
+              <li key={p.id} className="flex justify-between">
+                <span>{p.nickname || p.id.slice(0,4)}</span>
+                <span className="text-gray-500">score: {p.score}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </main>
   );
