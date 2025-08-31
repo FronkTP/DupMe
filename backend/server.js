@@ -36,7 +36,16 @@ const resetGame = (preservePlayers = false) => {
 };
 
 // Minimal in-memory rooms (prototype)
-const rooms = {}; // { [roomId]: { id, name, capacity, players: { [socketId]: true }, ready: { [socketId]: true } } }
+const rooms = {}; // { [roomId]: { id, name, capacity, players: { [socketId]: true }, ready: { [socketId]: true }, game?: GameState } }
+
+// Per-room minimal game state
+// phase: 'idle' | 'create' | 'replicate' | 'ended'
+// creatorId: socket id of the creator
+// pattern: array of notes created in create phase
+// submissions: { socketId: string[] } notes from non-creators in replicate phase
+// endsAt: epoch ms when current phase ends
+// tCreate/tReplicate: timeout handles
+// scores use global gameState.players[sid].score for simplicity
 
 const generateRoomId = () => Math.random().toString(36).slice(2, 6).toUpperCase();
 
@@ -94,6 +103,21 @@ io.on('connection', (socket) => {
 
   socket.on('CLIENT:SUBMIT_NOTE', (note) => {
     console.log(`Received note: ${note} from ${socket.id}`);
+    // If inside a room and in create/replicate phases, route accordingly
+    const roomId = socket.data?.roomId;
+    const room = roomId ? rooms[roomId] : null;
+    if (room && room.game) {
+      if (room.game.phase === 'create' && room.game.creatorId === socket.id) {
+        room.game.pattern.push(note);
+        io.to(roomId).emit('SERVER:PATTERN', { roomId, pattern: room.game.pattern });
+      } else if (room.game.phase === 'replicate' && room.game.creatorId !== socket.id) {
+        const arr = room.game.submissions[socket.id] || (room.game.submissions[socket.id] = []);
+        arr.push(note);
+      }
+      return; // handled by room mode
+    }
+
+    // Legacy global mode (unused once rooms active)
     if (gameState.currentPlayerTurn === socket.id) {
       gameState.currentPattern.push(note);
       broadcastGameState();
@@ -145,8 +169,7 @@ io.on('connection', (socket) => {
     const playerCount = Object.keys(room.players).length;
     const readyCount = Object.keys(room.ready).length;
     if (playerCount >= 2 && readyCount === playerCount) {
-      io.to(roomId).emit('SERVER:GAME_START', { roomId, at: Date.now() });
-      room.ready = {}; // reset readiness for next round
+      startCreatePhase(roomId);
     }
   });
 });
@@ -177,6 +200,7 @@ function leaveRoom(socket) {
   const room = rooms[roomId];
   if (!room) { socket.data.roomId = null; return; }
   delete room.players[socket.id];
+  if (room.ready) delete room.ready[socket.id];
   socket.leave(roomId);
   socket.data.roomId = null;
   if (Object.keys(room.players).length === 0) {
@@ -186,6 +210,59 @@ function leaveRoom(socket) {
   }
   broadcastRooms();
   socket.emit('SERVER:LEFT_ROOM');
+}
+
+// Phase management (very small prototype)
+function startCreatePhase(roomId) {
+  const room = rooms[roomId];
+  if (!room) return;
+  room.ready = {}; // reset ready state
+  // pick a creator randomly among room players
+  const playerIds = Object.keys(room.players);
+  const creatorId = playerIds[Math.floor(Math.random() * playerIds.length)];
+  room.game = {
+    phase: 'create',
+    creatorId,
+    pattern: [],
+    submissions: {},
+    endsAt: Date.now() + 10000,
+  };
+  io.to(roomId).emit('SERVER:GAME_START', { roomId, creatorId, phase: 'create', endsAt: room.game.endsAt });
+  // auto-advance
+  clearTimeout(room.game.tCreate);
+  room.game.tCreate = setTimeout(() => startReplicatePhase(roomId), 10000);
+}
+
+function startReplicatePhase(roomId) {
+  const room = rooms[roomId];
+  if (!room || !room.game) return;
+  room.game.phase = 'replicate';
+  room.game.submissions = {};
+  room.game.endsAt = Date.now() + 20000;
+  io.to(roomId).emit('SERVER:PHASE', { roomId, phase: 'replicate', creatorId: room.game.creatorId, endsAt: room.game.endsAt, pattern: room.game.pattern });
+  clearTimeout(room.game.tReplicate);
+  room.game.tReplicate = setTimeout(() => finishRound(roomId), 20000);
+}
+
+function finishRound(roomId) {
+  const room = rooms[roomId];
+  if (!room || !room.game) return;
+  // scoring: compare each non-creator submission to pattern sequentially
+  const pattern = room.game.pattern || [];
+  Object.keys(room.players).forEach((sid) => {
+    if (sid === room.game.creatorId) return;
+    const sub = (room.game.submissions[sid] || []);
+    let score = 0;
+    for (let i = 0; i < Math.min(pattern.length, sub.length); i++) {
+      if (pattern[i] === sub[i]) score++;
+      else break;
+    }
+    if (gameState.players[sid]) gameState.players[sid].score += score;
+  });
+  broadcastGameState();
+  // end and return to lobby for now
+  room.game = { phase: 'ended' };
+  io.to(roomId).emit('SERVER:PHASE', { roomId, phase: 'ended' });
 }
 
 server.listen(PORT, () => {

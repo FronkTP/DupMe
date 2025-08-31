@@ -25,6 +25,10 @@ export default function Home() {
   const [rooms, setRooms] = useState<RoomListItem[]>([]);
   const [room, setRoom] = useState<RoomSnapshot | null>(null);
   const [roomBanner, setRoomBanner] = useState<string>("");
+  const [phase, setPhase] = useState<'idle'|'create'|'replicate'|'ended'|null>(null);
+  const [phaseEndsAt, setPhaseEndsAt] = useState<number | null>(null);
+  const [creatorId, setCreatorId] = useState<string | null>(null);
+  const [replicatePattern, setReplicatePattern] = useState<string[]>([]);
 
 
   useEffect(() => {
@@ -54,7 +58,29 @@ export default function Home() {
     });
     newSocket.on('SERVER:JOINED_ROOM', () => setRoomBanner(""));
     newSocket.on('SERVER:LEFT_ROOM', () => { setRoom(null); setRoomBanner(""); });
-    newSocket.on('SERVER:GAME_START', () => setRoomBanner('Game starting!'));
+    type GameStartPayload = { roomId: string; creatorId?: string; phase?: 'create'; endsAt?: number };
+    type PhasePayload = { roomId: string; phase?: 'create'|'replicate'|'ended'; creatorId?: string; endsAt?: number; pattern?: string[] };
+    newSocket.on('SERVER:GAME_START', (p: GameStartPayload) => {
+      setRoomBanner('Create phase: start playing notes');
+      setPhase('create');
+      setPhaseEndsAt(p?.endsAt ?? null);
+      setCreatorId(p?.creatorId ?? null);
+      setReplicatePattern([]);
+    });
+    newSocket.on('SERVER:PHASE', (p: PhasePayload) => {
+      setPhase(p?.phase ?? null);
+      setCreatorId(p?.creatorId ?? null);
+      setPhaseEndsAt(p?.endsAt ?? null);
+      if (p?.phase === 'replicate') setRoomBanner('Replicate phase: match the pattern');
+      if (p?.phase === 'ended') setRoomBanner('Round ended');
+      if (p?.phase === 'replicate') setReplicatePattern(p?.pattern || []);
+      if (p?.phase === 'ended') setReplicatePattern([]);
+    });
+    newSocket.on('SERVER:PATTERN', (payload: { roomId: string; pattern: string[] }) => {
+      if (!payload?.pattern) return;
+      // Keep the latest pattern; we will display it during replicate
+      setReplicatePattern(payload.pattern);
+    });
 
     newSocket.on('disconnect', () => {
       console.log('❌ Disconnected from server');
@@ -70,15 +96,13 @@ export default function Home() {
     // Helper variables derived from state
   const isMyTurn = gameState && gameState.currentPlayerTurn === myId;
   const gameInProgress = gameState && gameState.gameStatus !== 'WAITING';
+  const isCreator = creatorId ? myId === creatorId : false;
+  const canPlay = phase === 'create' ? isCreator : phase === 'replicate' ? !isCreator : false;
 
 
   const handlePianoKeyClick = (note: string) => {
-    if (socket && isMyTurn) {
-      console.log(`Sending note to server: ${note}`);
-      socket.emit('CLIENT:SUBMIT_NOTE', note);
-    } else {
-      console.log("Not my turn or socket not ready!");
-    }
+    if (!socket) return;
+    socket.emit('CLIENT:SUBMIT_NOTE', note);
   };
 
   const submitNickname = () => {
@@ -129,10 +153,7 @@ export default function Home() {
         </div>
       )}
 
-      {hasNick && room && gameInProgress ? (
-        <Piano onKeyClick={handlePianoKeyClick} />
-      ) : (
-        hasNick && (
+      {hasNick && (
           <div className="p-8 bg-gray-800 rounded-lg w-full max-w-2xl">
             {!room ? (
               <div>
@@ -184,15 +205,27 @@ export default function Home() {
                     </li>
                   ))}
                 </ul>
-                <div className="flex gap-2">
-                  <button className="px-3 py-2 bg-green-600 rounded" onClick={() => socket?.emit('ROOMS:READY', true)}>Ready</button>
-                  <button className="px-3 py-2 bg-gray-600 rounded" onClick={() => socket?.emit('ROOMS:READY', false)}>Unready</button>
-                </div>
+                {(phase === null || phase === 'ended' || phase === 'idle') && (
+                  <div className="flex gap-2">
+                    <button className="px-3 py-2 bg-green-600 rounded" onClick={() => socket?.emit('ROOMS:READY', true)}>Ready</button>
+                    <button className="px-3 py-2 bg-gray-600 rounded" onClick={() => socket?.emit('ROOMS:READY', false)}>Unready</button>
+                  </div>
+                )}
+                {(phase === 'create' || phase === 'replicate') && (
+                  <div className="mt-4">
+                    <Piano onKeyClick={handlePianoKeyClick} disabled={!canPlay} />
+                  </div>
+                )}
+                {phase === 'replicate' && (
+                  <div className="mt-3 p-3 bg-gray-900 rounded border border-gray-700">
+                    <p className="text-sm text-gray-400">Pattern:</p>
+                    <p className="text-lg tracking-widest">{replicatePattern.join(' ') || '...'}</p>
+                  </div>
+                )}
               </div>
             )}
           </div>
-        )
-      )}
+        )}
 
       {gameState && gameState.currentPattern.length > 0 && (
           <div className="mt-6 p-4 bg-gray-800 rounded-lg">
