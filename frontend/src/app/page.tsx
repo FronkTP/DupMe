@@ -205,7 +205,7 @@ export default function Home() {
                     <li key={p.id} className="flex justify-between">
                       <span>{p.nickname || p.id.slice(0,4)}</span>
                       <span className="flex gap-3 items-center">
-                        <span className="text-gray-500">score: {p.score}</span>
+                        <span className="text-gray-500">score: {p.score}%</span>
                         {room.ready?.includes(p.id) && <span className="text-green-500">ready</span>}
                       </span>
                     </li>
@@ -241,7 +241,7 @@ export default function Home() {
                               {r.nickname || r.id.slice(0,4)}
                               {isWinner && <span className="ml-2 px-2 py-0.5 text-xs bg-yellow-500 text-black rounded">Winner</span>}
                             </span>
-                            <span className="text-gray-300">{r.score}</span>
+                            <span className="text-gray-300">{r.score}%</span>
                           </li>
                         );
                       })}
@@ -262,7 +262,7 @@ export default function Home() {
                               {r.nickname || r.id.slice(0,4)}
                               {isWinner && <span className="ml-2 px-2 py-0.5 text-xs bg-yellow-500 text-black rounded">Winner</span>}
                             </span>
-                            <span className="text-gray-300">{r.score}</span>
+                            <span className="text-gray-300">{r.score}%</span>
                           </li>
                         );
                       })}
