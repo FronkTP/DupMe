@@ -1,0 +1,36 @@
+import { generateRoomId } from './utils.js';
+
+// Simple in-memory rooms store for the prototype
+export const rooms = {}; // id -> room
+
+export const CREATE_MAX_NOTES = 10;
+
+// List rooms for lobby
+export const listRooms = () => Object.values(rooms).map((r) => ({
+  id: r.id,
+  name: r.name,
+  capacity: r.capacity,
+  count: Object.keys(r.players).length,
+}));
+
+// Create a new room and return its id
+export const createRoom = ({ name, capacity }) => {
+  const id = generateRoomId();
+  const cap = Math.max(2, Math.min(12, Number(capacity) || 2));
+  rooms[id] = { id, name: String(name || `Room ${id}`), capacity: cap, players: {}, ready: {}, joinOrder: [] };
+  return id;
+};
+
+// Snapshot sent to clients
+export const getRoomSnapshot = (roomId, playersState) => {
+  const room = rooms[roomId];
+  if (!room) return null;
+  const players = Object.keys(room.players).map((sid) => {
+    const p = playersState[sid];
+    return p ? { id: p.id, nickname: p.nickname, score: p.score } : { id: sid, nickname: null, score: 0 };
+  });
+  const ready = Object.keys(room.ready || {}).filter((sid) => room.ready[sid]);
+  return { id: room.id, name: room.name, capacity: room.capacity, players, ready };
+};
+
+

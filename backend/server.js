@@ -2,6 +2,9 @@ import http from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import express from 'express';
+import { toPercent } from './utils.js';
+import { rooms, listRooms, createRoom, getRoomSnapshot, CREATE_MAX_NOTES } from './rooms.js';
+import { makeGameApi } from './game.js';
 
 
 const app = express();
@@ -15,6 +18,8 @@ const io = new Server(server, {
     methods: ["GET", "POST"]
   }
 });
+
+
 
 const defaultGameState = {
   players: {},
@@ -35,9 +40,6 @@ const resetGame = (preservePlayers = false) => {
   };
 };
 
-// Minimal in-memory rooms (prototype)
-const rooms = {}; // { [roomId]: { id, name, capacity, players: { [socketId]: true }, ready: { [socketId]: true }, joinOrder: string[], game?: GameState } }
-
 // Per-room minimal game state
 // phase: 'idle' | 'create' | 'replicate' | 'ended'
 // creatorId: socket id of the creator
@@ -50,29 +52,16 @@ const rooms = {}; // { [roomId]: { id, name, capacity, players: { [socketId]: tr
 // roundBase: snapshot of scores at round start (per player)
 // roundBaseAttempts: snapshot of attempts at round start (per player)
 
-const CREATE_MAX_NOTES = 10;
-
-const generateRoomId = () => Math.random().toString(36).slice(2, 6).toUpperCase();
-
-const listRooms = () => Object.values(rooms).map((r) => ({
-  id: r.id,
-  name: r.name,
-  capacity: r.capacity,
-  count: Object.keys(r.players).length,
-}));
-
-const getRoomSnapshot = (roomId) => {
-  const room = rooms[roomId];
-  if (!room) return null;
-  const players = Object.keys(room.players).map((sid) => {
-    const p = gameState.players[sid];
-    return p ? { id: p.id, nickname: p.nickname, score: p.score } : { id: sid, nickname: null, score: 0 };
-  });
-  const ready = Object.keys(room.ready || {}).filter((sid) => room.ready[sid]);
-  return { id: room.id, name: room.name, capacity: room.capacity, players, ready };
-};
+// Game API (phase transitions)
+const { startGame } = makeGameApi({
+  getPlayersState: () => gameState.players,
+  broadcastRoom: (roomId) => io.to(roomId).emit('SERVER:ROOM', getRoomSnapshot(roomId, gameState.players)),
+  broadcastGameState: () => broadcastGameState(),
+  io,
+});
 
 const broadcastRooms = () => io.emit('SERVER:ROOMS', listRooms());
+const broadcastRoom = (roomId) => io.to(roomId).emit('SERVER:ROOM', getRoomSnapshot(roomId, gameState.players));
 
 const broadcastGameState = () => {
   io.emit('gameStateUpdate', gameState);
@@ -134,27 +123,20 @@ io.on('connection', (socket) => {
         room.game.attempts[socket.id] = baseAtt + arr.length;
         const correct = room.game.scores[socket.id];
         const att = room.game.attempts[socket.id];
-        const percent = att > 0 ? Math.round((correct / att) * 100) : 0;
+        const percent = toPercent(correct, att);
         if (gameState.players[socket.id]) gameState.players[socket.id].score = percent;
         // Update scoreboard for room and global list
-        io.to(roomId).emit('SERVER:ROOM', getRoomSnapshot(roomId));
+        broadcastRoom(roomId);
         broadcastGameState();
       }
       return; // handled by room mode
     }
 
-    // Legacy global mode (unused once rooms active)
-    if (gameState.currentPlayerTurn === socket.id) {
-      gameState.currentPattern.push(note);
-      broadcastGameState();
-    }
   });
 
   // Rooms: create / join / leave
   socket.on('ROOMS:CREATE', ({ name, capacity } = {}) => {
-    const id = generateRoomId();
-    const cap = Math.max(2, Math.min(12, Number(capacity) || 2));
-    rooms[id] = { id, name: String(name || `Room ${id}`), capacity: cap, players: {}, ready: {} };
+    const id = createRoom({ name, capacity });
     broadcastRooms();
     joinRoom(socket, id);
   });
@@ -171,7 +153,7 @@ io.on('connection', (socket) => {
       return; 
     }
 
-    delete gameState.players[socket.id];
+        delete gameState.players[socket.id];
 
     
     if (Object.keys(gameState.players).length < 2) {
@@ -179,7 +161,7 @@ io.on('connection', (socket) => {
       resetGame(true); 
     }
 
-    broadcastGameState();
+        broadcastGameState();
   });
   
   // Ready / Unready in a room
@@ -190,7 +172,7 @@ io.on('connection', (socket) => {
     if (!room) return;
     room.ready = room.ready || {};
     if (isReady) room.ready[socket.id] = true; else delete room.ready[socket.id];
-    io.to(roomId).emit('SERVER:ROOM', getRoomSnapshot(roomId));
+    broadcastRoom(roomId);
     // If everyone is ready and at least 2 players, trigger game start for this room
     const playerCount = Object.keys(room.players).length;
     const readyCount = Object.keys(room.ready).length;
@@ -217,7 +199,7 @@ function joinRoom(socket, roomId) {
   if (!room.joinOrder.includes(socket.id)) room.joinOrder.push(socket.id);
   socket.data = { ...(socket.data || {}), roomId };
   socket.join(roomId);
-  io.to(roomId).emit('SERVER:ROOM', getRoomSnapshot(roomId));
+  broadcastRoom(roomId);
   broadcastRooms();
   socket.emit('SERVER:JOINED_ROOM', roomId);
 }
@@ -235,109 +217,13 @@ function leaveRoom(socket) {
   if (Object.keys(room.players).length === 0) {
     delete rooms[roomId];
   } else {
-    io.to(roomId).emit('SERVER:ROOM', getRoomSnapshot(roomId));
+    broadcastRoom(roomId);
   }
   broadcastRooms();
   socket.emit('SERVER:LEFT_ROOM');
 }
 
-// Phase management (very small prototype)
-function startGame(roomId) {
-  const room = rooms[roomId];
-  if (!room) return;
-  room.ready = {}; // reset ready state
-  // order based on join sequence, filtered to current players
-  const currentPlayers = Object.keys(room.players);
-  const order = (room.joinOrder || []).filter((id) => currentPlayers.includes(id));
-  const scores = {};
-  const attempts = {};
-  order.forEach((sid) => { scores[sid] = 0; attempts[sid] = 0; if (gameState.players[sid]) gameState.players[sid].score = 0; });
-  room.game = { phase: 'create', order, roundIndex: 0, creatorId: order[0], pattern: [], submissions: {}, endsAt: Date.now() + 10000, scores, attempts, roundBase: { ...scores }, roundBaseAttempts: { ...attempts } };
-  io.to(roomId).emit('SERVER:GAME_START', { roomId, creatorId: room.game.creatorId, phase: 'create', endsAt: room.game.endsAt, roundIndex: room.game.roundIndex, totalRounds: order.length });
-  clearTimeout(room.game.tCreate);
-  room.game.tCreate = setTimeout(() => startReplicatePhase(roomId), 10000);
-}
-
-function startCreatePhase(roomId) {
-  const room = rooms[roomId];
-  if (!room || !room.game) return;
-  room.game.phase = 'create';
-  room.game.pattern = [];
-  room.game.submissions = {};
-  room.game.creatorId = room.game.order[room.game.roundIndex];
-  room.game.endsAt = Date.now() + 10000;
-  room.game.roundBase = { ...(room.game.scores || {}) };
-  room.game.roundBaseAttempts = { ...(room.game.attempts || {}) };
-  // Also sync visible scoreboard to base at the start of each creator round
-  Object.keys(room.game.roundBase).forEach((sid) => {
-    const correct = room.game.roundBase[sid] || 0;
-    const att = room.game.roundBaseAttempts[sid] || 0;
-    const percent = att > 0 ? Math.round((correct / att) * 100) : 0;
-    if (gameState.players[sid]) gameState.players[sid].score = percent;
-  });
-  broadcastGameState();
-  io.to(roomId).emit('SERVER:GAME_START', { roomId, creatorId: room.game.creatorId, phase: 'create', endsAt: room.game.endsAt, roundIndex: room.game.roundIndex, totalRounds: room.game.order.length });
-  clearTimeout(room.game.tCreate);
-  room.game.tCreate = setTimeout(() => startReplicatePhase(roomId), 10000);
-}
-
-function startReplicatePhase(roomId) {
-  const room = rooms[roomId];
-  if (!room || !room.game) return;
-  room.game.phase = 'replicate';
-  room.game.submissions = {};
-  room.game.endsAt = Date.now() + 20000;
-  io.to(roomId).emit('SERVER:PHASE', { roomId, phase: 'replicate', creatorId: room.game.creatorId, endsAt: room.game.endsAt, pattern: room.game.pattern });
-  clearTimeout(room.game.tReplicate);
-  room.game.tReplicate = setTimeout(() => finishRound(roomId), 20000);
-}
-
-function finishRound(roomId) {
-  const room = rooms[roomId];
-  if (!room || !room.game) return;
-  // scoring: compare each non-creator submission to pattern per-index
-  const pattern = room.game.pattern || [];
-  Object.keys(room.players).forEach((sid) => {
-    if (sid === room.game.creatorId) return;
-    const sub = (room.game.submissions[sid] || []);
-    let matches = 0;
-    for (let i = 0; i < Math.min(pattern.length, sub.length); i++) {
-      if (pattern[i] === sub[i]) matches++;
-    }
-    const base = (room.game.roundBase?.[sid] || 0);
-    const baseAtt = (room.game.roundBaseAttempts?.[sid] || 0);
-    room.game.scores[sid] = base + matches;
-    room.game.attempts[sid] = baseAtt + sub.length;
-    const correct = room.game.scores[sid];
-    const att = room.game.attempts[sid];
-    const percent = att > 0 ? Math.round((correct / att) * 100) : 0;
-    if (gameState.players[sid]) gameState.players[sid].score = percent;
-  });
-  broadcastGameState();
-  // If more rounds remain, advance to next creator
-  if (room.game.roundIndex + 1 < room.game.order.length) {
-    room.game.roundIndex += 1;
-    room.game.phase = 'ended';
-    io.to(roomId).emit('SERVER:PHASE', { roomId, phase: 'ended' });
-    // brief pause before next round
-    setTimeout(() => startCreatePhase(roomId), 1000);
-    return;
-  }
-  // Game over: prepare final results
-  const results = room.game.order.map((sid) => {
-    const correct = room.game.scores[sid] || 0;
-    const att = room.game.attempts?.[sid] || 0;
-    const percent = att > 0 ? Math.round((correct / att) * 100) : 0;
-    return {
-      id: sid,
-      nickname: gameState.players[sid]?.nickname || null,
-      score: percent,
-    };
-  });
-  // Keep scores until the next Ready cycle; do not reset immediately
-  room.game.phase = 'game_over';
-  io.to(roomId).emit('SERVER:GAME_END', { roomId, results });
-}
+// (Phase management moved to game.js)
 
 server.listen(PORT, () => {
   console.log(`🚀 Server is running and listening on port ${PORT}`);
