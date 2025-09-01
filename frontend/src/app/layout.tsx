@@ -27,6 +27,11 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        <div
+          aria-hidden="true"
+          className="fixed inset-0 -z-10 pointer-events-none bg-center bg-cover"
+          style={{ backgroundImage: "url('/main_background.webp')" }}
+        />
         {children}
       </body>
     </html>

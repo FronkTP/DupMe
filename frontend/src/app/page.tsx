@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
-import Piano from './components/Piano';
+import OnlineUsers from './components/ui/OnlineUsers';
+import Lobby from './components/ui/Lobby';
+import RoomView from './components/ui/RoomView';
+import TrafficLights from './components/ui/TrafficLights';
 
 // Socket endpoint for the backend
 const SOCKET_URL = 'http://localhost:6996';
@@ -144,171 +147,70 @@ export default function Home() {
   };
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-12 bg-gray-900 text-white">
-      <div className="text-center mb-8">
-        <h1 className="text-5xl font-bold tracking-tighter">DupMe Game</h1>
-        <p className="mt-2 text-lg text-gray-400">
-          {gameInProgress ? (isMyTurn ? "It's your turn!" : "Waiting for opponent...") : "Welcome!"}
-        </p>
-        <p className="mt-1 text-sm text-gray-500">Your ID: {myId}</p>
-      </div>
-
-      {!hasNick && (
-        <div className="p-4 bg-gray-800 rounded-lg w-full max-w-md">
-          <p className="mb-2">Enter your nickname to continue:</p>
-          <div className="flex gap-2">
-            <input
-              value={nickname}
-              onChange={(e) => setNickname(e.target.value)}
-              className="flex-1 px-3 py-2 rounded bg-gray-900 border border-gray-700 outline-none"
-              placeholder="Nickname"
-            />
-            <button onClick={submitNickname} className="px-4 py-2 bg-blue-600 rounded">Save</button>
-          </div>
+    <main className="min-h-screen p-3 w-full text-neutral-900 flex flex-col">
+      <header className="px-6 py-4 flex items-center justify-between shrink-0 text-gray-50">
+        <div className="flex items-center gap-4">
+          <TrafficLights />
+          <OnlineUsers users={Object.values(gameState?.players || {}).map(p => ({ id: p.id, nickname: p.nickname, score: p.score }))} />
         </div>
-      )}
+        <div className="text-xs">ID: {myId}</div>
+      </header>
 
-      {hasNick && (
-          <div className="p-8 bg-gray-800 rounded-lg w-full max-w-2xl">
-            {!room ? (
-              <div>
-                <div className="flex items-end gap-3 mb-4">
-                  <div className="flex flex-col gap-2">
-                    <label className="text-sm text-gray-400">Create room</label>
-                    <div className="flex gap-2">
-                      <input id="roomName" placeholder="Room name" className="px-3 py-2 rounded bg-gray-900 border border-gray-700" />
-                      <input id="roomCap" type="number" min={2} max={12} placeholder="Cap" className="w-20 px-3 py-2 rounded bg-gray-900 border border-gray-700" />
-                      <button
-                        className="px-4 py-2 bg-blue-600 rounded"
-                        onClick={() => {
-                          const name = (document.getElementById('roomName') as HTMLInputElement)?.value || '';
-                          const cap = Number((document.getElementById('roomCap') as HTMLInputElement)?.value || 2);
-                          createRoom(name, cap);
-                        }}
-                      >Create</button>
-                    </div>
-                  </div>
-                </div>
-                <p className="mb-2 font-semibold">Available rooms</p>
-                <ul className="space-y-2">
-                  {rooms.length === 0 && <li className="text-gray-400">No rooms yet. Create one!</li>}
-                  {rooms.map(r => (
-                    <li key={r.id} className="flex justify-between items-center bg-gray-900 rounded p-3">
-                      <span>{r.name} — {r.count}/{r.capacity}</span>
-                      <button className="px-3 py-1 bg-green-600 rounded" onClick={() => joinRoom(r.id)}>Join</button>
-                    </li>
-                  ))}
-                </ul>
+      <section className="flex-1 flex flex-col items-center justify-center px-6 pb-28 pt-4 space-y-8 overflow-y-auto">
+        <div className="text-center space-y-4">
+          <h1 className="text-5xl font-semibold text-gray-50 tracking-tight">DupMe</h1>
+          <p className="text-sm text-gray-200">
+            {gameInProgress ? (isMyTurn ? "It's your turn!" : "Waiting for opponent...") : "Welcome!"}
+          </p>
+        </div>
+
+        {!hasNick && (
+          <div className="w-full max-w-3xl mx-auto">
+            <div className="p-5 sm:p-6 rounded-3xl bg-[#272725] backdrop-blur-xl shadow-[0_12px_40px_rgba(0,0,0,0.35)] text-gray-100 space-y-3">
+              <p className="text-sm text-gray-200 mb-4">Enter your nickname to continue:</p>
+              <div className="flex gap-3">
+                <input
+                  value={nickname}
+                  onChange={(e) => setNickname(e.target.value)}
+                  className="flex-1 px-4 py-3 rounded-2xl bg-[#272725] text-white placeholder-white/60 border-white/10 outline-none"
+                  placeholder="Nickname"
+                />
+                <button onClick={submitNickname} className="px-5 py-3 rounded-full bg-gray-400 text-neutral-900 hover:bg-neutral-200 transition">Go!</button>
               </div>
-            ) : (
-              <div>
-                <div className="flex justify-between items-center mb-3">
-                  <p className="font-semibold">Room {room.name} ({room.id}) {room.players.length}/{room.capacity}</p>
-                  <button onClick={leaveRoom} className="px-3 py-1 bg-red-600 rounded">Leave</button>
-                </div>
-                {roomBanner && (
-                  <div className="mb-3 p-2 bg-blue-900 text-blue-200 rounded">{roomBanner}</div>
-                )}
-                <ul className="text-sm text-gray-300 space-y-1 mb-4">
-                  {room.players.map(p => (
-                    <li key={p.id} className="flex justify-between">
-                      <span>{p.nickname || p.id.slice(0,4)}</span>
-                      <span className="flex gap-3 items-center">
-                        <span className="text-gray-500">score: {p.score}%</span>
-                        {typeof p.attempts === 'number' && (
-                          <span className="text-gray-500">attempts: {p.attempts}</span>
-                        )}
-                        {typeof p.rejected === 'number' && p.rejected > 0 && (
-                          <span className="text-gray-500">ignored: {p.rejected}</span>
-                        )}
-                        {room.ready?.includes(p.id) && <span className="text-green-500">ready</span>}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-                {(phase === null || phase === 'idle' || phase === 'game_over') && (
-                  <div className="flex gap-2">
-                    <button className="px-3 py-2 bg-green-600 rounded" onClick={() => socket?.emit('ROOMS:READY', true)}>Ready</button>
-                    <button className="px-3 py-2 bg-gray-600 rounded" onClick={() => socket?.emit('ROOMS:READY', false)}>Unready</button>
-                  </div>
-                )}
-                {(phase === 'create' || phase === 'replicate' || phase === 'ended') && (
-                  <div className="mt-4">
-                    <Piano onKeyClick={handlePianoKeyClick} disabled={!canPlay} />
-                  </div>
-                )}
-                {phase === 'replicate' && (
-                  <div className="mt-3 p-3 bg-gray-900 rounded border border-gray-700">
-                    <p className="text-sm text-gray-400">Pattern:</p>
-                    <p className="text-lg tracking-widest">{replicatePattern.join(' ') || '...'}</p>
-                  </div>
-                )}
-                {phase === 'ended' && results && (
-                  <div className="mt-4 p-4 bg-gray-900 rounded border border-gray-700">
-                    <p className="font-semibold mb-2">Round results</p>
-                    <ul className="space-y-1">
-                      {results.sort((a,b)=>b.score-a.score).map((r, idx, arr) => {
-                        const top = arr[0]?.score ?? 0;
-                        const isWinner = r.score === top && top > 0;
-                        return (
-                          <li key={r.id} className="flex justify-between">
-                            <span>
-                              {r.nickname || r.id.slice(0,4)}
-                              {isWinner && <span className="ml-2 px-2 py-0.5 text-xs bg-yellow-500 text-black rounded">Winner</span>}
-                            </span>
-                            <span className="text-gray-300">{r.score}%</span>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                    <div className="mt-3 text-sm text-gray-400">Click Ready to start another round.</div>
-                  </div>
-                )}
-                {phase === 'game_over' && results && (
-                  <div className="mt-4 p-4 bg-gray-900 rounded border border-gray-700">
-                    <p className="font-semibold mb-2">Game winners</p>
-                    <ul className="space-y-1">
-                      {results.sort((a,b)=>b.score-a.score).map((r, idx, arr) => {
-                        const top = arr[0]?.score ?? 0;
-                        const isWinner = r.score === top && top > 0;
-                        return (
-                          <li key={r.id} className="flex justify-between">
-                            <span>
-                              {r.nickname || r.id.slice(0,4)}
-                              {isWinner && <span className="ml-2 px-2 py-0.5 text-xs bg-yellow-500 text-black rounded">Winner</span>}
-                            </span>
-                            <span className="text-gray-300">{r.score}%</span>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                    <div className="mt-3 text-sm text-gray-400">Click Ready to start a new game.</div>
-                  </div>
-                )}
-              </div>
-            )}
+            </div>
           </div>
         )}
 
-      {gameState && gameState.currentPattern.length > 0 && (
-          <div className="mt-6 p-4 bg-gray-800 rounded-lg">
-              <p>Current Pattern: {gameState.currentPattern.join(', ')}</p>
-          </div>
-      )}
+        {hasNick && (
+          !room ? (
+            <div className="w-full max-w-2xl mx-auto">
+              <Lobby rooms={rooms} onCreate={createRoom} onJoin={joinRoom} />
+            </div>
+          ) : (
+            <div className="w-full max-w-2xl mx-auto">
+              <RoomView
+                room={room}
+                phase={phase}
+                banner={roomBanner}
+                canPlay={canPlay}
+                replicatePattern={replicatePattern}
+                results={results}
+                isCreator={isCreator}
+                onLeave={leaveRoom}
+                onReady={(ready) => socket?.emit('ROOMS:READY', ready)}
+                onKeyClick={handlePianoKeyClick}
+              />
+            </div>
+          )
+        )}
 
-      {gameState && (
-        <div className="mt-6 p-4 bg-gray-800 rounded-lg w-full max-w-md">
-          <p className="mb-2 font-semibold">Online users</p>
-          <ul className="text-sm text-gray-300 space-y-1">
-            {Object.values(gameState.players).map((p) => (
-              <li key={p.id} className="flex justify-between">
-                <span>{p.nickname || p.id.slice(0,4)}</span>
-                <span className="text-gray-500">score: {p.score}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+        {gameState && gameState.currentPattern.length > 0 && (
+          <div className="p-3 rounded-xl border border-neutral-200 bg-white/70 w-full max-w-2xl mx-auto">
+            <p className="text-sm text-neutral-500">Current Pattern</p>
+            <p className="text-neutral-800 tracking-wider">{gameState.currentPattern.join(', ')}</p>
+          </div>
+        )}
+      </section>
     </main>
   );
 }

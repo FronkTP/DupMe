@@ -9,4 +9,36 @@ html,
 body,
 :root {
   height: 100%;
+  --card-bg: #272725;
+}
+
+/* Make all obvious interactive controls use a pointer cursor */
+button,
+a,
+label[for],
+input[type="button"],
+input[type="submit"],
+input[type="reset"],
+summary,
+[role="button"],
+[data-clickable="true"],
+button:where(:not(:disabled)),
+select:where(:not(:disabled)),
+input[type="checkbox"],
+input[type="radio"],
+input[type="range"],
+input[type="file"] {
+  cursor: pointer;
+}
+
+/* Disabled affordance */
+button:disabled,
+select:disabled,
+input:disabled {
+  cursor: not-allowed;
+}
+
+/* Ensure links without href still get pointer when marked clickable */
+a[role="button"] {
+  cursor: pointer;
 }
