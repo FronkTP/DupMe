@@ -6,6 +6,7 @@ import OnlineUsers from './components/ui/OnlineUsers';
 import Lobby from './components/ui/Lobby';
 import RoomView from './components/ui/RoomView';
 import TrafficLights from './components/ui/TrafficLights';
+import { Music } from 'lucide-react';
 
 // Socket endpoint for the backend
 const SOCKET_URL = 'http://localhost:6996';
@@ -175,7 +176,7 @@ export default function Home() {
                   className="flex-1 px-4 py-3 rounded-2xl bg-[#272725] text-white placeholder-white/60 border-white/10 outline-none"
                   placeholder="Nickname"
                 />
-                <button onClick={submitNickname} className="px-5 py-3 rounded-full bg-gray-400 text-neutral-900 hover:bg-neutral-200 transition">Go!</button>
+                <button onClick={submitNickname} className="p-5 rounded-full bg-gray-400 text-neutral-900 hover:bg-neutral-200 transition"><Music size={18} /></button>
               </div>
             </div>
           </div>
