@@ -14,6 +14,9 @@ export const makeGameApi = ({ getPlayersState, broadcastRoom, broadcastGameState
     const scores = {}; const attempts = {};
     order.forEach((sid) => { scores[sid] = 0; attempts[sid] = 0; const p = getPlayersState()[sid]; if (p) p.score = 0; });
     room.game = { phase: 'create', order, roundIndex: 0, creatorId: order[0], pattern: [], submissions: {}, endsAt: Date.now() + 10000, scores, attempts, roundBase: { ...scores }, roundBaseAttempts: { ...attempts } };
+    // Broadcast zeroed scoreboard immediately so clients don't show stale scores
+    broadcastGameState();
+    broadcastRoom(roomId);
     io.to(roomId).emit('SERVER:GAME_START', { roomId, creatorId: room.game.creatorId, phase: 'create', endsAt: room.game.endsAt, roundIndex: room.game.roundIndex, totalRounds: order.length });
     clearTimeout(room.game.tCreate);
     room.game.tCreate = setTimeout(() => startReplicatePhase(roomId), 10000);
