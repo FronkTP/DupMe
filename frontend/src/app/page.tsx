@@ -232,14 +232,42 @@ export default function Home() {
                   <div className="mt-4 p-4 bg-gray-900 rounded border border-gray-700">
                     <p className="font-semibold mb-2">Round results</p>
                     <ul className="space-y-1">
-                      {results.sort((a,b)=>b.score-a.score).map(r => (
-                        <li key={r.id} className="flex justify-between">
-                          <span>{r.nickname || r.id.slice(0,4)}</span>
-                          <span className="text-gray-300">{r.score}</span>
-                        </li>
-                      ))}
+                      {results.sort((a,b)=>b.score-a.score).map((r, idx, arr) => {
+                        const top = arr[0]?.score ?? 0;
+                        const isWinner = r.score === top && top > 0;
+                        return (
+                          <li key={r.id} className="flex justify-between">
+                            <span>
+                              {r.nickname || r.id.slice(0,4)}
+                              {isWinner && <span className="ml-2 px-2 py-0.5 text-xs bg-yellow-500 text-black rounded">Winner</span>}
+                            </span>
+                            <span className="text-gray-300">{r.score}</span>
+                          </li>
+                        );
+                      })}
                     </ul>
                     <div className="mt-3 text-sm text-gray-400">Click Ready to start another round.</div>
+                  </div>
+                )}
+                {phase === 'game_over' && results && (
+                  <div className="mt-4 p-4 bg-gray-900 rounded border border-gray-700">
+                    <p className="font-semibold mb-2">Game winners</p>
+                    <ul className="space-y-1">
+                      {results.sort((a,b)=>b.score-a.score).map((r, idx, arr) => {
+                        const top = arr[0]?.score ?? 0;
+                        const isWinner = r.score === top && top > 0;
+                        return (
+                          <li key={r.id} className="flex justify-between">
+                            <span>
+                              {r.nickname || r.id.slice(0,4)}
+                              {isWinner && <span className="ml-2 px-2 py-0.5 text-xs bg-yellow-500 text-black rounded">Winner</span>}
+                            </span>
+                            <span className="text-gray-300">{r.score}</span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                    <div className="mt-3 text-sm text-gray-400">Click Ready to start a new game.</div>
                   </div>
                 )}
               </div>

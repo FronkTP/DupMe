@@ -120,15 +120,17 @@ io.on('connection', (socket) => {
         const patternLen = room.game.pattern.length;
         if (arr.length >= patternLen) return;
         arr.push(note);
-        // Live scoring: per-index match
-        const idx = arr.length - 1;
-        if (room.game.pattern[idx] === note) {
-          room.game.scores[socket.id] = (room.game.scores[socket.id] || 0) + 1;
-          if (gameState.players[socket.id]) gameState.players[socket.id].score = room.game.scores[socket.id];
-          // Update scoreboard for room and global list
-          io.to(roomId).emit('SERVER:ROOM', getRoomSnapshot(roomId));
-          broadcastGameState();
+        // Live scoring: idempotent per-index count (so no double counting)
+        const base = (room.game.roundBase?.[socket.id] || 0);
+        let matches = 0;
+        for (let i = 0; i < arr.length; i++) {
+          if (room.game.pattern[i] === arr[i]) matches++;
         }
+        room.game.scores[socket.id] = base + matches;
+        if (gameState.players[socket.id]) gameState.players[socket.id].score = room.game.scores[socket.id];
+        // Update scoreboard for room and global list
+        io.to(roomId).emit('SERVER:ROOM', getRoomSnapshot(roomId));
+        broadcastGameState();
       }
       return; // handled by room mode
     }
@@ -241,7 +243,7 @@ function startGame(roomId) {
   const order = (room.joinOrder || []).filter((id) => currentPlayers.includes(id));
   const scores = {};
   order.forEach((sid) => { scores[sid] = 0; if (gameState.players[sid]) gameState.players[sid].score = 0; });
-  room.game = { phase: 'create', order, roundIndex: 0, creatorId: order[0], pattern: [], submissions: {}, endsAt: Date.now() + 10000, scores };
+  room.game = { phase: 'create', order, roundIndex: 0, creatorId: order[0], pattern: [], submissions: {}, endsAt: Date.now() + 10000, scores, roundBase: { ...scores } };
   io.to(roomId).emit('SERVER:GAME_START', { roomId, creatorId: room.game.creatorId, phase: 'create', endsAt: room.game.endsAt, roundIndex: room.game.roundIndex, totalRounds: order.length });
   clearTimeout(room.game.tCreate);
   room.game.tCreate = setTimeout(() => startReplicatePhase(roomId), 10000);
@@ -255,6 +257,12 @@ function startCreatePhase(roomId) {
   room.game.submissions = {};
   room.game.creatorId = room.game.order[room.game.roundIndex];
   room.game.endsAt = Date.now() + 10000;
+  room.game.roundBase = { ...(room.game.scores || {}) };
+  // Also sync visible scoreboard to base at the start of each creator round
+  Object.keys(room.game.roundBase).forEach((sid) => {
+    if (gameState.players[sid]) gameState.players[sid].score = room.game.roundBase[sid];
+  });
+  broadcastGameState();
   io.to(roomId).emit('SERVER:GAME_START', { roomId, creatorId: room.game.creatorId, phase: 'create', endsAt: room.game.endsAt, roundIndex: room.game.roundIndex, totalRounds: room.game.order.length });
   clearTimeout(room.game.tCreate);
   room.game.tCreate = setTimeout(() => startReplicatePhase(roomId), 10000);
@@ -274,16 +282,17 @@ function startReplicatePhase(roomId) {
 function finishRound(roomId) {
   const room = rooms[roomId];
   if (!room || !room.game) return;
-  // scoring: compare each non-creator submission to pattern sequentially
+  // scoring: compare each non-creator submission to pattern per-index
   const pattern = room.game.pattern || [];
   Object.keys(room.players).forEach((sid) => {
     if (sid === room.game.creatorId) return;
     const sub = (room.game.submissions[sid] || []);
-    let increment = 0;
+    let matches = 0;
     for (let i = 0; i < Math.min(pattern.length, sub.length); i++) {
-      if (pattern[i] === sub[i]) increment++;
+      if (pattern[i] === sub[i]) matches++;
     }
-    room.game.scores[sid] = (room.game.scores[sid] || 0) + increment;
+    const base = (room.game.roundBase?.[sid] || 0);
+    room.game.scores[sid] = base + matches;
     if (gameState.players[sid]) gameState.players[sid].score = room.game.scores[sid];
   });
   broadcastGameState();
@@ -302,11 +311,7 @@ function finishRound(roomId) {
     nickname: gameState.players[sid]?.nickname || null,
     score: room.game.scores[sid] || 0,
   }));
-  // Reset global visible scores after announcing winners
-  setTimeout(() => {
-    Object.keys(gameState.players).forEach((sid) => { if (gameState.players[sid]) gameState.players[sid].score = 0; });
-    broadcastGameState();
-  }, 500);
+  // Keep scores until the next Ready cycle; do not reset immediately
   room.game.phase = 'game_over';
   io.to(roomId).emit('SERVER:GAME_END', { roomId, results });
 }
