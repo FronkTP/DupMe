@@ -4,40 +4,47 @@ import { useEffect, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 import Piano from './components/Piano';
 
+// Socket endpoint for the backend
+const SOCKET_URL = 'http://localhost:6996';
+
+// Shapes we expect from the server
+type Player = { id: string; score: number };
+type GameState = {
+  players: Record<string, Player & { nickname: string | null }>;
+  gameStatus: 'WAITING' | 'CREATING_PATTERN' | 'PLAYING' | string;
+  currentPattern: string[];
+  currentPlayerTurn: string | null;
+  currentRound: number;
+};
+type RoomListItem = { id: string; name: string; capacity: number; count: number };
+type RoomSnapshot = { id: string; name: string; capacity: number; players: Array<{ id: string; nickname: string | null; score: number }>; ready?: string[] };
+
 export default function Home() {
-  type Player = { id: string; score: number };
-  type GameState = {
-    players: Record<string, Player & { nickname: string | null }>;
-    gameStatus: 'WAITING' | 'CREATING_PATTERN' | 'PLAYING' | string;
-    currentPattern: string[];
-    currentPlayerTurn: string | null;
-    currentRound: number;
-  };
-  type RoomListItem = { id: string; name: string; capacity: number; count: number };
-  type RoomSnapshot = { id: string; name: string; capacity: number; players: Array<{ id: string; nickname: string | null; score: number }>; ready?: string[] };
-
-  const [gameState, setGameState] = useState<GameState | null>(null);
-  const [myId, setMyId] = useState<string | null>(null);
-
+  // Connection + identity
   const [socket, setSocket] = useState<Socket | null>(null);
+  const [myId, setMyId] = useState<string | null>(null);
   const [nickname, setNickname] = useState<string>("");
   const [hasNick, setHasNick] = useState<boolean>(false);
+
+  // Server state and room lobby
+  const [gameState, setGameState] = useState<GameState | null>(null);
   const [rooms, setRooms] = useState<RoomListItem[]>([]);
   const [room, setRoom] = useState<RoomSnapshot | null>(null);
+
+  // In-room status
   const [roomBanner, setRoomBanner] = useState<string>("");
   const [phase, setPhase] = useState<'idle'|'create'|'replicate'|'ended'|'game_over'|null>(null);
-  const [phaseEndsAt, setPhaseEndsAt] = useState<number | null>(null);
   const [creatorId, setCreatorId] = useState<string | null>(null);
   const [replicatePattern, setReplicatePattern] = useState<string[]>([]);
   const [results, setResults] = useState<Array<{ id: string; nickname: string | null; score: number }> | null>(null);
 
 
   useEffect(() => {
-    // 1. Create the socket connection
-    const newSocket = io('http://localhost:6996');
+    // Open socket connection once
+    const newSocket = io(SOCKET_URL);
     setSocket(newSocket);
 
-    // 2. Set up event listeners
+    // Wire up server events
     newSocket.on('connect', () => {
       console.log(`✅ Connected! My ID is ${newSocket.id}`);
       setMyId(newSocket.id ?? null);
@@ -64,7 +71,6 @@ export default function Home() {
     newSocket.on('SERVER:GAME_START', (p: GameStartPayload) => {
       setRoomBanner(`Round ${((p?.roundIndex ?? 0) + 1)}/${p?.totalRounds ?? ''} • Create phase: start playing notes`);
       setPhase('create');
-      setPhaseEndsAt(p?.endsAt ?? null);
       setCreatorId(p?.creatorId ?? null);
       setReplicatePattern([]);
       setResults(null);
@@ -72,7 +78,6 @@ export default function Home() {
     newSocket.on('SERVER:PHASE', (p: PhasePayload) => {
       setPhase(p?.phase ?? null);
       setCreatorId(p?.creatorId ?? null);
-      setPhaseEndsAt(p?.endsAt ?? null);
       if (p?.phase === 'replicate') setRoomBanner('Replicate phase: match the pattern');
       if (p?.phase === 'ended') setRoomBanner('Round ended');
       if (p?.phase === 'replicate') setReplicatePattern(p?.pattern || []);
@@ -94,24 +99,26 @@ export default function Home() {
       setRoomBanner("");
     });
 
-    // 3. Cleanup: disconnect the socket when the component unmounts
+    // Cleanup on unmount
     return () => {
       newSocket.disconnect();
     };
   }, []); 
 
-    // Helper variables derived from state
+  // Derived flags for UI enablement
   const isMyTurn = gameState && gameState.currentPlayerTurn === myId;
   const gameInProgress = gameState && gameState.gameStatus !== 'WAITING';
   const isCreator = creatorId ? myId === creatorId : false;
   const canPlay = phase === 'create' ? isCreator : phase === 'replicate' ? !isCreator : false;
 
 
+  // Send a note to the server; server decides how to route it
   const handlePianoKeyClick = (note: string) => {
     if (!socket) return;
     socket.emit('CLIENT:SUBMIT_NOTE', note);
   };
 
+  // Save nickname once per connection
   const submitNickname = () => {
     if (!socket) return;
     const clean = nickname.trim();
@@ -120,17 +127,18 @@ export default function Home() {
     setHasNick(true);
   };
 
+  // Lobby actions
   const createRoom = (name: string, capacity: number) => {
     if (!socket) return;
     socket.emit('ROOMS:CREATE', { name, capacity });
   };
 
-  const joinRoom = (id: string) => {
+  const joinRoom = (id: string) : void => {
     if (!socket) return;
     socket.emit('ROOMS:JOIN', id);
   };
 
-  const leaveRoom = () => {
+  const leaveRoom = () : void => {
     if (!socket) return;
     socket.emit('ROOMS:LEAVE');
   };
