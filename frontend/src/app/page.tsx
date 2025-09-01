@@ -67,6 +67,7 @@ export default function Home() {
       setPhaseEndsAt(p?.endsAt ?? null);
       setCreatorId(p?.creatorId ?? null);
       setReplicatePattern([]);
+      setResults(null);
     });
     newSocket.on('SERVER:PHASE', (p: PhasePayload) => {
       setPhase(p?.phase ?? null);
@@ -211,13 +212,13 @@ export default function Home() {
                     </li>
                   ))}
                 </ul>
-                {(phase === null || phase === 'ended' || phase === 'idle') && (
+                {(phase === null || phase === 'idle' || phase === 'game_over') && (
                   <div className="flex gap-2">
                     <button className="px-3 py-2 bg-green-600 rounded" onClick={() => socket?.emit('ROOMS:READY', true)}>Ready</button>
                     <button className="px-3 py-2 bg-gray-600 rounded" onClick={() => socket?.emit('ROOMS:READY', false)}>Unready</button>
                   </div>
                 )}
-                {(phase === 'create' || phase === 'replicate') && (
+                {(phase === 'create' || phase === 'replicate' || phase === 'ended') && (
                   <div className="mt-4">
                     <Piano onKeyClick={handlePianoKeyClick} disabled={!canPlay} />
                   </div>
