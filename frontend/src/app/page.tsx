@@ -17,7 +17,7 @@ type GameState = {
   currentRound: number;
 };
 type RoomListItem = { id: string; name: string; capacity: number; count: number };
-type RoomSnapshot = { id: string; name: string; capacity: number; players: Array<{ id: string; nickname: string | null; score: number }>; ready?: string[] };
+type RoomSnapshot = { id: string; name: string; capacity: number; players: Array<{ id: string; nickname: string | null; score: number; attempts?: number; rejected?: number }>; ready?: string[] };
 
 export default function Home() {
   // Connection + identity
@@ -215,6 +215,12 @@ export default function Home() {
                       <span>{p.nickname || p.id.slice(0,4)}</span>
                       <span className="flex gap-3 items-center">
                         <span className="text-gray-500">score: {p.score}%</span>
+                        {typeof p.attempts === 'number' && (
+                          <span className="text-gray-500">attempts: {p.attempts}</span>
+                        )}
+                        {typeof p.rejected === 'number' && p.rejected > 0 && (
+                          <span className="text-gray-500">ignored: {p.rejected}</span>
+                        )}
                         {room.ready?.includes(p.id) && <span className="text-green-500">ready</span>}
                       </span>
                     </li>

@@ -25,9 +25,13 @@ export const createRoom = ({ name, capacity }) => {
 export const getRoomSnapshot = (roomId, playersState) => {
   const room = rooms[roomId];
   if (!room) return null;
+  const attemptsMap = room.game?.attempts || {};
+  const rejectedMap = room.game?.rejected || {};
   const players = Object.keys(room.players).map((sid) => {
     const p = playersState[sid];
-    return p ? { id: p.id, nickname: p.nickname, score: p.score } : { id: sid, nickname: null, score: 0 };
+    return p
+      ? { id: p.id, nickname: p.nickname, score: p.score, attempts: attemptsMap[sid] || 0, rejected: rejectedMap[sid] || 0 }
+      : { id: sid, nickname: null, score: 0, attempts: attemptsMap[sid] || 0, rejected: rejectedMap[sid] || 0 };
   });
   const ready = Object.keys(room.ready || {}).filter((sid) => room.ready[sid]);
   return { id: room.id, name: room.name, capacity: room.capacity, players, ready };

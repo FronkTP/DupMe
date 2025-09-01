@@ -110,7 +110,13 @@ io.on('connection', (socket) => {
         const arr = room.game.submissions[socket.id] || (room.game.submissions[socket.id] = []);
         // Do not accept more notes than the pattern length
         const patternLen = room.game.pattern.length;
-        if (arr.length >= patternLen) return;
+        if (arr.length >= patternLen) {
+          // Count the rejected click (beyond cap) for visibility
+          room.game.rejected = room.game.rejected || {};
+          room.game.rejected[socket.id] = (room.game.rejected[socket.id] || 0) + 1;
+          broadcastRoom(roomId);
+          return;
+        }
         arr.push(note);
         // Live scoring: idempotent per-index count (so no double counting)
         const base = (room.game.roundBase?.[socket.id] || 0);
