@@ -15,7 +15,6 @@ const SOCKET_URL = 'http://localhost:6996';
 type Player = { id: string; score: number };
 type GameState = {
   players: Record<string, Player & { nickname: string | null }>;
-  gameStatus: 'WAITING' | 'CREATING_PATTERN' | 'PLAYING' | string;
   currentPattern: string[];
   currentPlayerTurn: string | null;
   currentRound: number;
@@ -110,8 +109,6 @@ export default function Home() {
   }, []); 
 
   // Derived flags for UI enablement
-  const isMyTurn = gameState && gameState.currentPlayerTurn === myId;
-  const gameInProgress = gameState && gameState.gameStatus !== 'WAITING';
   const isCreator = creatorId ? myId === creatorId : false;
   const canPlay = phase === 'create' ? isCreator : phase === 'replicate' ? !isCreator : false;
 
@@ -161,7 +158,17 @@ export default function Home() {
         <div className="text-center space-y-4">
           <h1 className="text-5xl font-semibold text-gray-50 tracking-tight">DupMe</h1>
           <p className="text-sm text-gray-200">
-            {gameInProgress ? (isMyTurn ? "It's your turn!" : "Waiting for opponent...") : "Welcome!"}
+            {!room
+              ? "Welcome!"
+              : phase === 'create'
+                ? (isCreator ? "You're creating the pattern" : "Waiting for creator...")
+                : phase === 'replicate'
+                  ? (isCreator ? "Waiting for players to follow" : "Follow the pattern")
+                  : phase === 'ended'
+                    ? "Round ended"
+                    : phase === 'game_over'
+                      ? "Game over"
+                      : ""}
           </p>
         </div>
 

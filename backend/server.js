@@ -23,7 +23,6 @@ const io = new Server(server, {
 
 const defaultGameState = {
   players: {},
-  gameStatus: 'WAITING',
   currentPattern: [],
   currentPlayerTurn: null,
   currentRound: 0,
