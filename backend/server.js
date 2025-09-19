@@ -14,7 +14,7 @@ const PORT = process.env.PORT || 6996;
 
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:3000",
+    origin: ["http://localhost:3000", "http://10.98.94.14:3000", "http://10.98.94.191:3000"], // ip of the host, ip of the client
     methods: ["GET", "POST"]
   }
 });

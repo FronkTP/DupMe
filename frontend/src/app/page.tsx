@@ -9,7 +9,7 @@ import TrafficLights from './components/ui/TrafficLights';
 import { Music } from 'lucide-react';
 
 // Socket endpoint for the backend
-const SOCKET_URL = 'http://localhost:6996';
+const SOCKET_URL = 'http://10.98.94.14:6996'; // ip of the host
 
 // Shapes we expect from the server
 type Player = { id: string; score: number };
