@@ -9,7 +9,7 @@ import TrafficLights from './components/ui/TrafficLights';
 import { Music } from 'lucide-react';
 
 // Socket endpoint for the backend
-const SOCKET_URL = 'http://10.98.94.14:6996'; // ip of the host
+const SOCKET_URL = 'http://localhost:6996'; // ip of the host
 
 // Shapes we expect from the server
 type Player = { id: string; score: number };
@@ -156,7 +156,7 @@ export default function Home() {
 
       <section className="flex-1 flex flex-col items-center justify-center px-6 pb-28 pt-4 space-y-8 overflow-y-auto">
         <div className="text-center space-y-4">
-          <h1 className="text-5xl font-semibold text-gray-50 tracking-tight">DupMe</h1>
+          <h1 className="text-6xl font-semibold text-gray-50 tracking-tight">DupMe</h1>
           <p className="text-sm text-gray-200">
             {!room
               ? "Welcome!"
@@ -183,7 +183,7 @@ export default function Home() {
                   className="flex-1 px-4 py-3 rounded-2xl bg-[#272725] text-white placeholder-white/60 border-white/10 outline-none"
                   placeholder="Nickname"
                 />
-                <button onClick={submitNickname} className="p-5 rounded-full bg-gray-400 text-neutral-900 hover:bg-neutral-200 transition"><Music size={18} /></button>
+                <button onClick={submitNickname} className="p-5 rounded-full bg-neutral-200 text-neutral-900 hover:bg-gray-400 transition"><Music size={18} /></button>
               </div>
             </div>
           </div>
