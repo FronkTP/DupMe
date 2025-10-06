@@ -4,6 +4,11 @@
 const notes = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
 
 export default function Piano({ onKeyClick, disabled } : { onKeyClick: (note: string) => void, disabled?: boolean }) {
+  const labelFor = (n: string) => {
+    const u = (n || '').toUpperCase();
+    const octave = '4'; // match audio mapping C4–B4
+    return ['C','D','E','F','G','A','B'].includes(u) ? `${u}${octave}` : u;
+  };
   
   const handleKeyClick = (note: string) => {
     if (disabled) return;
@@ -22,7 +27,7 @@ export default function Piano({ onKeyClick, disabled } : { onKeyClick: (note: st
           <button
             key={note}
             type="button"
-            aria-label={`Play note ${note}`}
+            aria-label={`Play note ${labelFor(note)}`}
             disabled={!!disabled}
             onClick={() => handleKeyClick(note)}
             className={`group relative flex items-end justify-center pb-3 h-44 sm:h-56 w-12 sm:w-16 rounded-xl border transition-all duration-150 ease-out
@@ -32,7 +37,7 @@ export default function Piano({ onKeyClick, disabled } : { onKeyClick: (note: st
           >
             <span className="absolute inset-x-2 bottom-2 h-1.5 rounded-full bg-neutral-300/80 group-active:bg-neutral-400/90" />
             <span className="text-lg sm:text-xl font-semibold text-neutral-700 group-hover:text-neutral-800">
-              {note}
+              {labelFor(note)}
             </span>
             <span className="pointer-events-none absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity"
               style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.6) 0%, rgba(255,255,255,0) 40%)' }} />

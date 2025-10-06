@@ -85,6 +85,13 @@ export default function RoomView({ room, phase, banner, canPlay, replicatePatter
         </div>
       )}
 
+      {phase === 'create' && (
+        <div className="mt-2 p-3 bg-[#272725] rounded-lg text-sm text-gray-200">
+          <span>Notes added: {replicatePattern.length} / 10</span>
+          <span className="ml-3 text-gray-400">Extra clicks beyond 10 will be ignored</span>
+        </div>
+      )}
+
       {phase === 'ended' && results && (
         <div className="mt-2 p-4 bg-[#272725] rounded-lg">
           <p className="font-semibold mb-2">Round results</p>

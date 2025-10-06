@@ -67,10 +67,10 @@ export const makeGameApi = ({ getPlayersState, broadcastRoom, broadcastGameState
     if (!room || !room.game) return;
     room.game.phase = 'replicate';
     room.game.submissions = {};
-    room.game.endsAt = Date.now() + 20000;
+    room.game.endsAt = Date.now() + 15000;
     io.to(roomId).emit('SERVER:PHASE', { roomId, phase: 'replicate', creatorId: room.game.creatorId, endsAt: room.game.endsAt, pattern: room.game.pattern });
     clearTimeout(room.game.tReplicate);
-    room.game.tReplicate = setTimeout(() => finishRound(roomId), 20000);
+    room.game.tReplicate = setTimeout(() => finishRound(roomId), 15000);
   };
 
   const finishRound = (roomId) => {
