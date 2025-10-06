@@ -7,6 +7,7 @@ import Lobby from './components/ui/Lobby';
 import RoomView from './components/ui/RoomView';
 import TrafficLights from './components/ui/TrafficLights';
 import { Music } from 'lucide-react';
+import { ensureAudioContext, playSequence } from './utils/audio';
 
 // Socket endpoint for the backend
 const SOCKET_URL = 'http://localhost:6996'; // ip of the host
@@ -36,12 +37,14 @@ export default function Home() {
 
   // In-room status
   const [roomBanner, setRoomBanner] = useState<string>("");
-  const [phase, setPhase] = useState<'idle'|'create'|'replicate'|'ended'|'game_over'|null>(null);
+  const [phase, setPhase] = useState<'idle'|'create'|'playback'|'replicate'|'ended'|'game_over'|null>(null);
   const [creatorId, setCreatorId] = useState<string | null>(null);
   const [replicatePattern, setReplicatePattern] = useState<string[]>([]);
   const [results, setResults] = useState<Array<{ id: string; nickname: string | null; score: number }> | null>(null);
   const [phaseEndsAt, setPhaseEndsAt] = useState<number | null>(null);
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
+  const [audioReady, setAudioReady] = useState<boolean>(false);
+  const [lastPlaybackEndsAt, setLastPlaybackEndsAt] = useState<number | null>(null);
 
 
   useEffect(() => {
@@ -65,9 +68,9 @@ export default function Home() {
       setRoom(snapshot);
     });
     newSocket.on('SERVER:JOINED_ROOM', () => setRoomBanner(""));
-    newSocket.on('SERVER:LEFT_ROOM', () => { setRoom(null); setRoomBanner(""); });
+    newSocket.on('SERVER:LEFT_ROOM', () => { setRoom(null); setRoomBanner(""); setAudioReady(false); setLastPlaybackEndsAt(null); });
     type GameStartPayload = { roomId: string; creatorId?: string; phase?: 'create'; endsAt?: number; roundIndex?: number; totalRounds?: number };
-    type PhasePayload = { roomId: string; phase?: 'create'|'replicate'|'ended'|'game_over'; creatorId?: string; endsAt?: number; pattern?: string[]; results?: Array<{ id: string; nickname: string | null; score: number }>} ;
+    type PhasePayload = { roomId: string; phase?: 'create'|'playback'|'replicate'|'ended'|'game_over'; creatorId?: string; endsAt?: number; pattern?: string[]; results?: Array<{ id: string; nickname: string | null; score: number }>} ;
     newSocket.on('SERVER:GAME_START', (p: GameStartPayload) => {
       setRoomBanner(`Round ${((p?.roundIndex ?? 0) + 1)}/${p?.totalRounds ?? ''} • Create phase: start playing notes`);
       setPhase('create');
@@ -79,8 +82,10 @@ export default function Home() {
     newSocket.on('SERVER:PHASE', (p: PhasePayload) => {
       setPhase(p?.phase ?? null);
       setCreatorId(p?.creatorId ?? null);
+      if (p?.phase === 'playback') setRoomBanner('Listening: melody is playing');
       if (p?.phase === 'replicate') setRoomBanner('Replicate phase: match the pattern');
       if (p?.phase === 'ended') setRoomBanner('Round ended');
+      if (p?.phase === 'playback') setReplicatePattern(p?.pattern || []);
       if (p?.phase === 'replicate') setReplicatePattern(p?.pattern || []);
       if (p?.phase === 'ended') { setReplicatePattern([]); if (p?.results) setResults(p.results); }
       setPhaseEndsAt(typeof p?.endsAt === 'number' ? p.endsAt : null);
@@ -111,7 +116,7 @@ export default function Home() {
 
   // Countdown timer derived from server-provided endsAt
   useEffect(() => {
-    if (!phaseEndsAt || !(phase === 'create' || phase === 'replicate')) {
+    if (!phaseEndsAt || !(phase === 'create' || phase === 'playback' || phase === 'replicate')) {
       setRemainingSeconds(null);
       return;
     }
@@ -127,6 +132,18 @@ export default function Home() {
     return () => clearInterval(id);
   }, [phaseEndsAt, phase]);
 
+  // Auto-play pattern during playback phase once per round
+  useEffect(() => {
+    if (phase !== 'playback') return;
+    if (!audioReady) return;
+    if (!phaseEndsAt) return;
+    if (lastPlaybackEndsAt === phaseEndsAt) return;
+    setLastPlaybackEndsAt(phaseEndsAt);
+    const notes = (replicatePattern && replicatePattern.length > 0) ? replicatePattern : [];
+    if (notes.length === 0) return;
+    playSequence(notes, { noteMs: 450, gapMs: 100, waveform: 'triangle' });
+  }, [phase, audioReady, phaseEndsAt, replicatePattern, lastPlaybackEndsAt]);
+
   // Derived flags for UI enablement
   const isCreator = creatorId ? myId === creatorId : false;
   const canPlay = phase === 'create' ? isCreator : phase === 'replicate' ? !isCreator : false;
@@ -139,12 +156,13 @@ export default function Home() {
   };
 
   // Save nickname once per connection
-  const submitNickname = () => {
+  const submitNickname = async () => {
     if (!socket) return;
     const clean = nickname.trim();
     if (!clean) return;
     socket.emit('CLIENT:SET_NICKNAME', clean);
     setHasNick(true);
+    await ensureAudio();
   };
 
   // Lobby actions
@@ -161,6 +179,12 @@ export default function Home() {
   const leaveRoom = () : void => {
     if (!socket) return;
     socket.emit('ROOMS:LEAVE');
+  };
+
+  // Unlock audio on any clear gesture: submitting nickname or toggling ready
+  const ensureAudio = async () => {
+    const ok = await ensureAudioContext();
+    if (ok) setAudioReady(true);
   };
 
   return (
@@ -181,6 +205,8 @@ export default function Home() {
               ? "Welcome!"
               : phase === 'create'
                 ? (isCreator ? "You're creating the pattern" : "Waiting for creator...")
+                : phase === 'playback'
+                  ? "Listening..."
                 : phase === 'replicate'
                   ? (isCreator ? "Waiting for players to follow" : "Follow the pattern")
                   : phase === 'ended'
@@ -225,7 +251,7 @@ export default function Home() {
                 isCreator={isCreator}
                 remainingSeconds={remainingSeconds}
                 onLeave={leaveRoom}
-                onReady={(ready) => socket?.emit('ROOMS:READY', ready)}
+                onReady={async (ready) => { await ensureAudio(); socket?.emit('ROOMS:READY', ready); }}
                 onKeyClick={handlePianoKeyClick}
               />
             </div>

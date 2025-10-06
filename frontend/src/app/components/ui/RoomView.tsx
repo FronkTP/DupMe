@@ -9,7 +9,7 @@ type RoomSnapshot = { id: string; name: string; capacity: number; players: Playe
 
 type RoomViewProps = {
   room: RoomSnapshot;
-  phase: 'idle'|'create'|'replicate'|'ended'|'game_over'|null;
+  phase: 'idle'|'create'|'playback'|'replicate'|'ended'|'game_over'|null;
   banner: string;
   canPlay: boolean;
   replicatePattern: string[];
@@ -21,7 +21,7 @@ type RoomViewProps = {
   onKeyClick: (note: string) => void;
 };
 
-export default function RoomView({ room, phase, banner, canPlay, replicatePattern, results, isCreator, remainingSeconds, onLeave, onReady, onKeyClick }: RoomViewProps) {
+export default function RoomView({ room, phase, banner, canPlay, replicatePattern, results, remainingSeconds, onLeave, onReady, onKeyClick }: RoomViewProps) {
   return (
     <div className="space-y-4 bg-[#272725] p-4 rounded-2xl text-gray-200">
       <div className="flex items-center justify-between">
@@ -32,10 +32,10 @@ export default function RoomView({ room, phase, banner, canPlay, replicatePatter
       {banner && (
         <div className="p-2 rounded-lg bg-[#272725] text-gray-200 flex items-center justify-between">
           <span>{banner}</span>
-          {(phase === 'create' || phase === 'replicate') && typeof remainingSeconds === 'number' && (
+          {(phase === 'create' || phase === 'playback' || phase === 'replicate') && typeof remainingSeconds === 'number' && (
             <span className="inline-flex items-center gap-2 px-2 py-1 rounded-lg bg-black/30 border border-white/10 text-xs text-gray-200">
               <span aria-hidden><Timer size={16} /></span>
-              <span>{phase === 'create' ? 'Create' : 'Replicate'}: {remainingSeconds}s</span>
+              <span>{phase === 'create' ? 'Create' : phase === 'playback' ? 'Playback' : 'Replicate'}: {remainingSeconds}s</span>
             </span>
           )}
         </div>
@@ -71,6 +71,12 @@ export default function RoomView({ room, phase, banner, canPlay, replicatePatter
           <Piano onKeyClick={onKeyClick} disabled={!canPlay} />
         </div>
       )}
+
+      {phase === 'playback' && (
+		<div className="mt-2">
+		  <Piano onKeyClick={onKeyClick} disabled={true} />
+		</div>
+	  )}
 
       {phase === 'replicate' && (
         <div className="mt-2 p-3 bg-[#272725] rounded-lg">
