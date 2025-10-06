@@ -40,6 +40,8 @@ export default function Home() {
   const [creatorId, setCreatorId] = useState<string | null>(null);
   const [replicatePattern, setReplicatePattern] = useState<string[]>([]);
   const [results, setResults] = useState<Array<{ id: string; nickname: string | null; score: number }> | null>(null);
+  const [phaseEndsAt, setPhaseEndsAt] = useState<number | null>(null);
+  const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
 
 
   useEffect(() => {
@@ -61,11 +63,6 @@ export default function Home() {
     newSocket.on('SERVER:ROOMS', (list: RoomListItem[]) => setRooms(list));
     newSocket.on('SERVER:ROOM', (snapshot: RoomSnapshot) => {
       setRoom(snapshot);
-      const readyLen = snapshot.ready?.length ?? 0;
-      const playerLen = snapshot.players.length;
-      if (playerLen < 2 || readyLen !== playerLen) {
-        setRoomBanner("");
-      }
     });
     newSocket.on('SERVER:JOINED_ROOM', () => setRoomBanner(""));
     newSocket.on('SERVER:LEFT_ROOM', () => { setRoom(null); setRoomBanner(""); });
@@ -77,6 +74,7 @@ export default function Home() {
       setCreatorId(p?.creatorId ?? null);
       setReplicatePattern([]);
       setResults(null);
+      setPhaseEndsAt(typeof p?.endsAt === 'number' ? p.endsAt : null);
     });
     newSocket.on('SERVER:PHASE', (p: PhasePayload) => {
       setPhase(p?.phase ?? null);
@@ -85,11 +83,13 @@ export default function Home() {
       if (p?.phase === 'ended') setRoomBanner('Round ended');
       if (p?.phase === 'replicate') setReplicatePattern(p?.pattern || []);
       if (p?.phase === 'ended') { setReplicatePattern([]); if (p?.results) setResults(p.results); }
+      setPhaseEndsAt(typeof p?.endsAt === 'number' ? p.endsAt : null);
     });
     newSocket.on('SERVER:GAME_END', (payload: { roomId: string; results: Array<{ id: string; nickname: string | null; score: number }> }) => {
       setPhase('game_over');
       setResults(payload.results || []);
       setRoomBanner('Game over');
+      setPhaseEndsAt(null);
     });
     newSocket.on('SERVER:PATTERN', (payload: { roomId: string; pattern: string[] }) => {
       if (!payload?.pattern) return;
@@ -100,6 +100,7 @@ export default function Home() {
     newSocket.on('disconnect', () => {
       console.log('❌ Disconnected from server');
       setRoomBanner("");
+      setPhaseEndsAt(null);
     });
 
     // Cleanup on unmount
@@ -107,6 +108,24 @@ export default function Home() {
       newSocket.disconnect();
     };
   }, []); 
+
+  // Countdown timer derived from server-provided endsAt
+  useEffect(() => {
+    if (!phaseEndsAt || !(phase === 'create' || phase === 'replicate')) {
+      setRemainingSeconds(null);
+      return;
+    }
+
+    const update = () => {
+      const msLeft = phaseEndsAt - Date.now();
+      const secs = Math.max(0, Math.ceil(msLeft / 1000));
+      setRemainingSeconds(secs);
+    };
+
+    update();
+    const id = setInterval(update, 250);
+    return () => clearInterval(id);
+  }, [phaseEndsAt, phase]);
 
   // Derived flags for UI enablement
   const isCreator = creatorId ? myId === creatorId : false;
@@ -204,6 +223,7 @@ export default function Home() {
                 replicatePattern={replicatePattern}
                 results={results}
                 isCreator={isCreator}
+                remainingSeconds={remainingSeconds}
                 onLeave={leaveRoom}
                 onReady={(ready) => socket?.emit('ROOMS:READY', ready)}
                 onKeyClick={handlePianoKeyClick}

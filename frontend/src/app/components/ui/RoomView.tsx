@@ -1,5 +1,6 @@
 "use client";
 
+import { Timer } from "lucide-react";
 import Piano from "../Piano";
 
 type Player = { id: string; nickname: string | null; score: number; attempts?: number; rejected?: number };
@@ -14,12 +15,13 @@ type RoomViewProps = {
   replicatePattern: string[];
   results: Array<{ id: string; nickname: string | null; score: number }> | null;
   isCreator: boolean;
+  remainingSeconds: number | null;
   onLeave: () => void;
   onReady: (ready: boolean) => void;
   onKeyClick: (note: string) => void;
 };
 
-export default function RoomView({ room, phase, banner, canPlay, replicatePattern, results, isCreator, onLeave, onReady, onKeyClick }: RoomViewProps) {
+export default function RoomView({ room, phase, banner, canPlay, replicatePattern, results, isCreator, remainingSeconds, onLeave, onReady, onKeyClick }: RoomViewProps) {
   return (
     <div className="space-y-4 bg-[#272725] p-4 rounded-2xl text-gray-200">
       <div className="flex items-center justify-between">
@@ -28,7 +30,15 @@ export default function RoomView({ room, phase, banner, canPlay, replicatePatter
       </div>
 
       {banner && (
-        <div className="p-2 rounded-lg bg-[#272725] text-gray-200">{banner}</div>
+        <div className="p-2 rounded-lg bg-[#272725] text-gray-200 flex items-center justify-between">
+          <span>{banner}</span>
+          {(phase === 'create' || phase === 'replicate') && typeof remainingSeconds === 'number' && (
+            <span className="inline-flex items-center gap-2 px-2 py-1 rounded-lg bg-black/30 border border-white/10 text-xs text-gray-200">
+              <span aria-hidden><Timer size={16} /></span>
+              <span>{phase === 'create' ? 'Create' : 'Replicate'}: {remainingSeconds}s</span>
+            </span>
+          )}
+        </div>
       )}
 
       <ul className="text-sm text-gray-200 space-y-1">
