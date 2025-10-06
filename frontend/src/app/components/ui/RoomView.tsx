@@ -21,7 +21,12 @@ type RoomViewProps = {
   onKeyClick: (note: string) => void;
 };
 
-export default function RoomView({ room, phase, banner, canPlay, replicatePattern, results, remainingSeconds, onLeave, onReady, onKeyClick }: RoomViewProps) {
+export default function RoomView({ room, phase, banner, canPlay, replicatePattern, results, isCreator, remainingSeconds, onLeave, onReady, onKeyClick }: RoomViewProps) {
+  const labelFor = (n: string) => {
+    const u = (n || '').toUpperCase();
+    const octave = '4';
+    return ['C','D','E','F','G','A','B'].includes(u) ? `${u}${octave}` : u;
+  };
   return (
     <div className="space-y-4 bg-[#272725] p-4 rounded-2xl text-gray-200">
       <div className="flex items-center justify-between">
@@ -78,14 +83,14 @@ export default function RoomView({ room, phase, banner, canPlay, replicatePatter
 		</div>
 	  )}
 
-      {phase === 'replicate' && (
+      {phase === 'replicate' && isCreator && (
         <div className="mt-2 p-3 bg-[#272725] rounded-lg">
           <p className="text-sm text-gray-200">Pattern:</p>
-          <p className="text-lg tracking-widest">{replicatePattern.join(' ') || '...'}</p>
+          <p className="text-lg tracking-widest">{(replicatePattern.length ? replicatePattern.map(labelFor) : []).join(' ') || '...'}</p>
         </div>
       )}
 
-      {phase === 'create' && (
+      {phase === 'create' && isCreator && (
         <div className="mt-2 p-3 bg-[#272725] rounded-lg text-sm text-gray-200">
           <span>Notes added: {replicatePattern.length} / 10</span>
           <span className="ml-3 text-gray-400">Extra clicks beyond 10 will be ignored</span>
