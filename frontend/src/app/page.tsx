@@ -50,6 +50,7 @@ export default function Home() {
   const [demoNoteMs, setDemoNoteMs] = useState<number>(500);
   const [demoGapMs, setDemoGapMs] = useState<number>(150);
   const [highlightIndex, setHighlightIndex] = useState<number>(-1);
+  const clickGlowTimeoutRef = useRef<number | null>(null);
 
 
   useEffect(() => {
@@ -185,6 +186,17 @@ export default function Home() {
   // Send a note to the server; server decides how to route it
   const handlePianoKeyClick = (note: string) => {
     if (!socket) return;
+    // Local visual feedback for both creator (create phase) and replicators
+    const idx = ['C','D','E','F','G','A','B'].indexOf((note || '').toUpperCase());
+    if (idx >= 0) {
+      setHighlightIndex(idx);
+      if (clickGlowTimeoutRef.current) window.clearTimeout(clickGlowTimeoutRef.current);
+      clickGlowTimeoutRef.current = window.setTimeout(() => setHighlightIndex(-1), 200);
+    }
+    // Local audio feedback only for creator during create
+    if (isCreator && phase === 'create' && audioReady) {
+      playSequence([note], { noteMs: 250, gapMs: 0, waveform: 'triangle' });
+    }
     socket.emit('CLIENT:SUBMIT_NOTE', note);
   };
 
@@ -282,7 +294,7 @@ export default function Home() {
                 replicatePattern={replicatePattern}
                 results={results}
                 isCreator={isCreator}
-                highlightIndex={phase === 'demo' ? highlightIndex : -1}
+                highlightIndex={highlightIndex}
                 remainingSeconds={remainingSeconds}
                 onLeave={leaveRoom}
                 onReady={async (ready) => { await ensureAudio(); socket?.emit('ROOMS:READY', ready); }}
