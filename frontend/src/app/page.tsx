@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { io, Socket } from 'socket.io-client';
 import OnlineUsers from './components/ui/OnlineUsers';
 import Lobby from './components/ui/Lobby';
 import RoomView from './components/ui/RoomView';
 import TrafficLights from './components/ui/TrafficLights';
+import WinnerCelebration from './components/ui/WinnerCelebration';
 import { Music } from 'lucide-react';
 import { ensureAudioContext, playSequence } from './utils/audio';
 
@@ -41,6 +42,7 @@ export default function Home() {
   const [creatorId, setCreatorId] = useState<string | null>(null);
   const [replicatePattern, setReplicatePattern] = useState<string[]>([]);
   const [results, setResults] = useState<Array<{ id: string; nickname: string | null; score: number }> | null>(null);
+  const [winnerOverlayOpen, setWinnerOverlayOpen] = useState<boolean>(false);
   const [phaseEndsAt, setPhaseEndsAt] = useState<number | null>(null);
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
   const [audioReady, setAudioReady] = useState<boolean>(false);
@@ -84,6 +86,7 @@ export default function Home() {
       setReplicatePattern([]);
       setResults(null);
       setPhaseEndsAt(typeof p?.endsAt === 'number' ? p.endsAt : null);
+      setWinnerOverlayOpen(false);
     });
     newSocket.on('SERVER:PHASE', (p: PhasePayload) => {
       setPhase(p?.phase ?? null);
@@ -109,6 +112,7 @@ export default function Home() {
       setResults(payload.results || []);
       setRoomBanner('Game over');
       setPhaseEndsAt(null);
+      setWinnerOverlayOpen(true);
     });
     newSocket.on('SERVER:PATTERN', (payload: { roomId: string; pattern: string[] }) => {
       if (!payload?.pattern) return;
@@ -120,6 +124,7 @@ export default function Home() {
       console.log('❌ Disconnected from server');
       setRoomBanner("");
       setPhaseEndsAt(null);
+      setWinnerOverlayOpen(false);
     });
 
     // Cleanup on unmount
@@ -233,6 +238,14 @@ export default function Home() {
     if (ok) setAudioReady(true);
   };
 
+  // Compute top-score winners (cap to two) when results are present
+  const topWinners = useMemo(() => {
+    if (!results || results.length === 0) return [] as Array<{ id: string; nickname: string | null; score: number }>;
+    const sorted = [...results].sort((a, b) => b.score - a.score);
+    const topScore = sorted[0]?.score ?? 0;
+    return sorted.filter(r => r.score === topScore).slice(0, 2);
+  }, [results]);
+
   return (
     <main className="min-h-screen p-3 w-full text-neutral-900 flex flex-col">
       <header className="px-6 py-4 flex items-center justify-between shrink-0 text-gray-50">
@@ -312,6 +325,12 @@ export default function Home() {
           </div>
         )}
       </section>
+      {/* Winner overlay - only visible at game over; click-to-dismiss */}
+      <WinnerCelebration
+        open={winnerOverlayOpen && phase === 'game_over' && topWinners.length > 0}
+        winners={topWinners}
+        onDismiss={() => setWinnerOverlayOpen(false)}
+      />
     </main>
   );
 }
