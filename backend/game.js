@@ -13,13 +13,12 @@ export const makeGameApi = ({ getPlayersState, broadcastRoom, broadcastGameState
     const order = (room.joinOrder || []).filter((id) => currentPlayers.includes(id));
     const scores = {}; const attempts = {};
     order.forEach((sid) => { scores[sid] = 0; attempts[sid] = 0; const p = getPlayersState()[sid]; if (p) p.score = 0; });
-    room.game = { phase: 'create', order, roundIndex: 0, creatorId: order[0], pattern: [], submissions: {}, endsAt: Date.now() + 10000, scores, attempts, rejected: {}, roundBase: { ...scores }, roundBaseAttempts: { ...attempts } };
+    room.game = { phase: 'demo', order, roundIndex: 0, creatorId: order[0], pattern: [], submissions: {}, endsAt: Date.now(), scores, attempts, rejected: {}, roundBase: { ...scores }, roundBaseAttempts: { ...attempts } };
     // Broadcast zeroed scoreboard immediately so clients don't show stale scores
     broadcastGameState();
     broadcastRoom(roomId);
-    io.to(roomId).emit('SERVER:GAME_START', { roomId, creatorId: room.game.creatorId, phase: 'create', endsAt: room.game.endsAt, roundIndex: room.game.roundIndex, totalRounds: order.length });
-    clearTimeout(room.game.tCreate);
-    room.game.tCreate = setTimeout(() => startPlaybackPhase(roomId), 10000);
+    // Start with a short sound demo before create
+    startDemoPhase(roomId);
   };
 
   const startCreatePhase = (roomId) => {
@@ -41,6 +40,24 @@ export const makeGameApi = ({ getPlayersState, broadcastRoom, broadcastGameState
     io.to(roomId).emit('SERVER:GAME_START', { roomId, creatorId: room.game.creatorId, phase: 'create', endsAt: room.game.endsAt, roundIndex: room.game.roundIndex, totalRounds: room.game.order.length });
     clearTimeout(room.game.tCreate);
     room.game.tCreate = setTimeout(() => startPlaybackPhase(roomId), 10000);
+  };
+
+  // New: sound demo phase at the beginning of the game
+  const startDemoPhase = (roomId) => {
+    const room = rooms[roomId];
+    if (!room || !room.game) return;
+    room.game.phase = 'demo';
+    const sequence = ['C','D','E','F','G','A','B'];
+    const noteMs = 500;
+    const gapMs = 150;
+    const leadMs = 150;
+    const tailMs = 150;
+    const totalMs = leadMs + (sequence.length * (noteMs + gapMs) - gapMs) + tailMs;
+    const playbackDurationMs = Math.min(totalMs, 8000);
+    room.game.endsAt = Date.now() + playbackDurationMs;
+    io.to(roomId).emit('SERVER:PHASE', { roomId, phase: 'demo', creatorId: room.game.creatorId, endsAt: room.game.endsAt, sequence, noteMs, gapMs });
+    clearTimeout(room.game.tDemo);
+    room.game.tDemo = setTimeout(() => startCreatePhase(roomId), playbackDurationMs);
   };
 
   // New: playback phase between create and replicate

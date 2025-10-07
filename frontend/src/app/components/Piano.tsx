@@ -3,7 +3,7 @@
 // An array representing the notes on our piano
 const notes = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
 
-export default function Piano({ onKeyClick, disabled } : { onKeyClick: (note: string) => void, disabled?: boolean }) {
+export default function Piano({ onKeyClick, disabled, highlightIndex = -1 } : { onKeyClick: (note: string) => void, disabled?: boolean, highlightIndex?: number }) {
   const labelFor = (n: string) => {
     const u = (n || '').toUpperCase();
     const octave = '4'; // match audio mapping C4–B4
@@ -23,7 +23,11 @@ export default function Piano({ onKeyClick, disabled } : { onKeyClick: (note: st
       <div aria-hidden className="pointer-events-none absolute inset-0 rounded-2xl opacity-70"
         style={{ background: 'radial-gradient(900px 280px at 50% -10%, rgba(255,255,255,0.12), transparent)' }} />
       <div className="relative flex justify-center gap-2 sm:gap-3 select-none">
-        {notes.map((note) => (
+        {notes.map((note, idx) => {
+          const rainbow = ['#f87171','#fbbf24','#facc15','#4ade80','#60a5fa','#a78bfa','#f472b6'];
+          const glow = rainbow[idx % rainbow.length];
+          const isHighlighted = highlightIndex === idx;
+          return (
           <button
             key={note}
             type="button"
@@ -41,8 +45,13 @@ export default function Piano({ onKeyClick, disabled } : { onKeyClick: (note: st
             </span>
             <span className="pointer-events-none absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity"
               style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.6) 0%, rgba(255,255,255,0) 40%)' }} />
+            {isHighlighted && (
+              <span aria-hidden className="pointer-events-none absolute -inset-1 rounded-2xl blur-md opacity-80"
+                style={{ background: glow }} />
+            )}
           </button>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

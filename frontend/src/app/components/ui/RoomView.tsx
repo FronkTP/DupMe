@@ -9,19 +9,20 @@ type RoomSnapshot = { id: string; name: string; capacity: number; players: Playe
 
 type RoomViewProps = {
   room: RoomSnapshot;
-  phase: 'idle'|'create'|'playback'|'replicate'|'ended'|'game_over'|null;
+  phase: 'idle'|'demo'|'create'|'playback'|'replicate'|'ended'|'game_over'|null;
   banner: string;
   canPlay: boolean;
   replicatePattern: string[];
   results: Array<{ id: string; nickname: string | null; score: number }> | null;
   isCreator: boolean;
+  highlightIndex: number;
   remainingSeconds: number | null;
   onLeave: () => void;
   onReady: (ready: boolean) => void;
   onKeyClick: (note: string) => void;
 };
 
-export default function RoomView({ room, phase, banner, canPlay, replicatePattern, results, isCreator, remainingSeconds, onLeave, onReady, onKeyClick }: RoomViewProps) {
+export default function RoomView({ room, phase, banner, canPlay, replicatePattern, results, isCreator, highlightIndex, remainingSeconds, onLeave, onReady, onKeyClick }: RoomViewProps) {
   const labelFor = (n: string) => {
     const u = (n || '').toUpperCase();
     const octave = '4';
@@ -37,10 +38,10 @@ export default function RoomView({ room, phase, banner, canPlay, replicatePatter
       {banner && (
         <div className="p-2 rounded-lg bg-[#272725] text-gray-200 flex items-center justify-between">
           <span>{banner}</span>
-          {(phase === 'create' || phase === 'playback' || phase === 'replicate') && typeof remainingSeconds === 'number' && (
+          {(phase === 'demo' || phase === 'create' || phase === 'playback' || phase === 'replicate') && typeof remainingSeconds === 'number' && (
             <span className="inline-flex items-center gap-2 px-2 py-1 rounded-lg bg-black/30 border border-white/10 text-xs text-gray-200">
               <span aria-hidden><Timer size={16} /></span>
-              <span>{phase === 'create' ? 'Create' : phase === 'playback' ? 'Playback' : 'Replicate'}: {remainingSeconds}s</span>
+              <span>{phase === 'demo' ? 'Demo' : phase === 'create' ? 'Create' : phase === 'playback' ? 'Playback' : 'Replicate'}: {remainingSeconds}s</span>
             </span>
           )}
         </div>
@@ -71,15 +72,15 @@ export default function RoomView({ room, phase, banner, canPlay, replicatePatter
         </div>
       )}
 
-      {(phase === 'create' || phase === 'replicate' || phase === 'ended') && (
+      {(phase === 'demo' || phase === 'create' || phase === 'replicate' || phase === 'ended') && (
         <div className="mt-2">
-          <Piano onKeyClick={onKeyClick} disabled={!canPlay} />
+          <Piano onKeyClick={onKeyClick} disabled={!canPlay} highlightIndex={highlightIndex} />
         </div>
       )}
 
       {phase === 'playback' && (
 		<div className="mt-2">
-		  <Piano onKeyClick={onKeyClick} disabled={true} />
+		  <Piano onKeyClick={onKeyClick} disabled={true} highlightIndex={-1} />
 		</div>
 	  )}
 

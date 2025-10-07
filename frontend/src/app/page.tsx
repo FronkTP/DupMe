@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import OnlineUsers from './components/ui/OnlineUsers';
 import Lobby from './components/ui/Lobby';
@@ -37,7 +37,7 @@ export default function Home() {
 
   // In-room status
   const [roomBanner, setRoomBanner] = useState<string>("");
-  const [phase, setPhase] = useState<'idle'|'create'|'playback'|'replicate'|'ended'|'game_over'|null>(null);
+  const [phase, setPhase] = useState<'idle'|'demo'|'create'|'playback'|'replicate'|'ended'|'game_over'|null>(null);
   const [creatorId, setCreatorId] = useState<string | null>(null);
   const [replicatePattern, setReplicatePattern] = useState<string[]>([]);
   const [results, setResults] = useState<Array<{ id: string; nickname: string | null; score: number }> | null>(null);
@@ -45,6 +45,11 @@ export default function Home() {
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
   const [audioReady, setAudioReady] = useState<boolean>(false);
   const [lastPlaybackEndsAt, setLastPlaybackEndsAt] = useState<number | null>(null);
+  const lastDemoEndsAtRef = useRef<number | null>(null);
+  const [demoSequence, setDemoSequence] = useState<string[]>([]);
+  const [demoNoteMs, setDemoNoteMs] = useState<number>(500);
+  const [demoGapMs, setDemoGapMs] = useState<number>(150);
+  const [highlightIndex, setHighlightIndex] = useState<number>(-1);
 
 
   useEffect(() => {
@@ -70,7 +75,7 @@ export default function Home() {
     newSocket.on('SERVER:JOINED_ROOM', () => setRoomBanner(""));
     newSocket.on('SERVER:LEFT_ROOM', () => { setRoom(null); setRoomBanner(""); setAudioReady(false); setLastPlaybackEndsAt(null); });
     type GameStartPayload = { roomId: string; creatorId?: string; phase?: 'create'; endsAt?: number; roundIndex?: number; totalRounds?: number };
-    type PhasePayload = { roomId: string; phase?: 'create'|'playback'|'replicate'|'ended'|'game_over'; creatorId?: string; endsAt?: number; pattern?: string[]; results?: Array<{ id: string; nickname: string | null; score: number }>} ;
+    type PhasePayload = { roomId: string; phase?: 'demo'|'create'|'playback'|'replicate'|'ended'|'game_over'; creatorId?: string; endsAt?: number; pattern?: string[]; sequence?: string[]; noteMs?: number; gapMs?: number; results?: Array<{ id: string; nickname: string | null; score: number }>} ;
     newSocket.on('SERVER:GAME_START', (p: GameStartPayload) => {
       setRoomBanner(`Round ${((p?.roundIndex ?? 0) + 1)}/${p?.totalRounds ?? ''} • Create phase: start playing notes`);
       setPhase('create');
@@ -82,6 +87,14 @@ export default function Home() {
     newSocket.on('SERVER:PHASE', (p: PhasePayload) => {
       setPhase(p?.phase ?? null);
       setCreatorId(p?.creatorId ?? null);
+      if (p?.phase === 'demo') {
+        setRoomBanner('Sound demo: listen to each note');
+        setDemoSequence(p?.sequence || ['C','D','E','F','G','A','B']);
+        if (typeof p?.noteMs === 'number') setDemoNoteMs(p.noteMs);
+        if (typeof p?.gapMs === 'number') setDemoGapMs(p.gapMs);
+        setReplicatePattern([]);
+        setResults(null);
+      }
       if (p?.phase === 'playback') setRoomBanner('Listening: melody is playing');
       if (p?.phase === 'replicate') setRoomBanner('Replicate phase: match the pattern');
       if (p?.phase === 'ended') setRoomBanner('Round ended');
@@ -116,7 +129,7 @@ export default function Home() {
 
   // Countdown timer derived from server-provided endsAt
   useEffect(() => {
-    if (!phaseEndsAt || !(phase === 'create' || phase === 'playback' || phase === 'replicate')) {
+    if (!phaseEndsAt || !(phase === 'demo' || phase === 'create' || phase === 'playback' || phase === 'replicate')) {
       setRemainingSeconds(null);
       return;
     }
@@ -143,6 +156,26 @@ export default function Home() {
     if (notes.length === 0) return;
     playSequence(notes, { noteMs: 450, gapMs: 100, waveform: 'triangle' });
   }, [phase, audioReady, phaseEndsAt, replicatePattern, lastPlaybackEndsAt]);
+
+  // Auto-play demo sequence and schedule highlights
+  useEffect(() => {
+    if (phase !== 'demo') { setHighlightIndex(-1); return; }
+    if (!audioReady) return;
+    if (!phaseEndsAt) return;
+    if (lastDemoEndsAtRef.current === phaseEndsAt) return;
+    lastDemoEndsAtRef.current = phaseEndsAt;
+    const seq = demoSequence && demoSequence.length ? demoSequence : ['C','D','E','F','G','A','B'];
+    playSequence(seq, { noteMs: demoNoteMs, gapMs: demoGapMs, waveform: 'triangle' });
+    // schedule highlighting using timeouts to ensure exact sequence
+    const timeouts: number[] = [];
+    for (let i = 0; i < seq.length; i++) {
+      const id = window.setTimeout(() => setHighlightIndex(i), i * (demoNoteMs + demoGapMs));
+      timeouts.push(id);
+    }
+    const clearId = window.setTimeout(() => setHighlightIndex(-1), seq.length * (demoNoteMs + demoGapMs));
+    timeouts.push(clearId);
+    return () => { timeouts.forEach((id) => window.clearTimeout(id)); };
+  }, [phase, audioReady, phaseEndsAt, demoSequence, demoNoteMs, demoGapMs]);
 
   // Derived flags for UI enablement
   const isCreator = creatorId ? myId === creatorId : false;
@@ -249,6 +282,7 @@ export default function Home() {
                 replicatePattern={replicatePattern}
                 results={results}
                 isCreator={isCreator}
+                highlightIndex={phase === 'demo' ? highlightIndex : -1}
                 remainingSeconds={remainingSeconds}
                 onLeave={leaveRoom}
                 onReady={async (ready) => { await ensureAudio(); socket?.emit('ROOMS:READY', ready); }}
