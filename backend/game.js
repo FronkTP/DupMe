@@ -66,15 +66,15 @@ export const makeGameApi = ({ getPlayersState, broadcastRoom, broadcastGameState
     if (!room || !room.game) return;
     room.game.phase = 'playback';
     // Basic timing for fixed-step playback
-    const noteMs = 450; // tone length per note
-    const gapMs = 100;  // gap between notes
+    const noteMs = 500; // tone length per note
+    const gapMs = 150;  // gap between notes
     const leadMs = 200; // small lead-in before first note
     const tailMs = 200; // small tail after last note
     const patternLen = (room.game.pattern?.length || 0);
     const base = patternLen > 0 ? (leadMs + patternLen * (noteMs + gapMs) - gapMs + tailMs) : 700;
     const playbackDurationMs = Math.min(base, 8000); // cap to keep rounds snappy
     room.game.endsAt = Date.now() + playbackDurationMs;
-    io.to(roomId).emit('SERVER:PHASE', { roomId, phase: 'playback', creatorId: room.game.creatorId, endsAt: room.game.endsAt, pattern: room.game.pattern, noteMs });
+    io.to(roomId).emit('SERVER:PHASE', { roomId, phase: 'playback', creatorId: room.game.creatorId, endsAt: room.game.endsAt, pattern: room.game.pattern, noteMs, gapMs });
     clearTimeout(room.game.tPlayback);
     room.game.tPlayback = setTimeout(() => startReplicatePhase(roomId), playbackDurationMs);
   };

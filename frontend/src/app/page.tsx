@@ -155,8 +155,9 @@ export default function Home() {
     setLastPlaybackEndsAt(phaseEndsAt);
     const notes = (replicatePattern && replicatePattern.length > 0) ? replicatePattern : [];
     if (notes.length === 0) return;
-    playSequence(notes, { noteMs: 450, gapMs: 100, waveform: 'triangle' });
-  }, [phase, audioReady, phaseEndsAt, replicatePattern, lastPlaybackEndsAt]);
+    // Determine playback timing from last SERVER:PHASE payload (stored via demoNoteMs/gapMs if playback provided)
+    playSequence(notes, { noteMs: demoNoteMs || 500, gapMs: demoGapMs || 10, waveform: 'triangle' });
+  }, [phase, audioReady, phaseEndsAt, replicatePattern, lastPlaybackEndsAt, demoNoteMs, demoGapMs]);
 
   // Auto-play demo sequence and schedule highlights
   useEffect(() => {
