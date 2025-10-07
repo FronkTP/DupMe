@@ -68,7 +68,7 @@ export default function RoomView({ room, phase, banner, canPlay, replicatePatter
       {(phase === null || phase === 'idle' || phase === 'game_over') && (
         <div className="flex gap-2">
           <button className="px-3 py-2 bg-green-900 text-white rounded-lg" onClick={() => onReady(true)}>Ready</button>
-          <button className="px-3 py-2 bg-gray-400 text-neutral-900 hover:bg-neutral-200 transition rounded-lg" onClick={() => onReady(false)}>Unready</button>
+          <button className="px-3 py-2 bg-neutral-200 text-neutral-900 hover:bg-gray-400 transition rounded-lg" onClick={() => onReady(false)}>Unready</button>
         </div>
       )}
 

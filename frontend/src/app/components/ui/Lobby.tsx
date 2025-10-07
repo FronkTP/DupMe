@@ -22,7 +22,7 @@ export default function Lobby({ rooms, onCreate, onJoin }: LobbyProps) {
           <input id={nameId} placeholder="Room name" className="flex-1 px-3 py-2 rounded-lg bg-[#272725] text-white outline-none focus:ring-2 focus:ring-neutral-300" />
           <input id={capId} type="number" min={2} max={12} placeholder="Cap" className="w-28 px-3 py-2 rounded-lg bg-[#272725] text-white outline-none focus:ring-2 focus:ring-neutral-300" />
           <button
-            className="px-4 py-2 rounded-lg bg-gray-400 text-neutral-900 hover:bg-neutral-200 transition"
+            className="px-4 py-2 rounded-lg bg-neutral-200 text-neutral-900 hover:bg-gray-400 transition"
             onClick={() => {
               const nameEl = document.getElementById(nameId) as HTMLInputElement | null;
               const capEl = document.getElementById(capId) as HTMLInputElement | null;
@@ -46,7 +46,7 @@ export default function Lobby({ rooms, onCreate, onJoin }: LobbyProps) {
                 <span className="font-medium text-gray-200">{r.name}</span>
                 <span className="text-gray-200 ml-2">{r.count}/{r.capacity}</span>
               </div>
-              <button className="px-3 py-1.5 rounded-lg bg-gray-400 text-gray-900 hover:bg-neutral-200 transition" onClick={() => onJoin(r.id)}>Join</button>
+              <button className="px-3 py-1.5 rounded-lg bg-neutral-200 text-gray-900 hover:bg-gray-400 transition" onClick={() => onJoin(r.id)}>Join</button>
             </li>
           ))}
         </ul>
