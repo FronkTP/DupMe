@@ -9,6 +9,8 @@
   --font-ancizar-sans: var(--font-ancizar-sans);
   --font-sans: var(--font-ancizar-sans), var(--font-inter), system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
   --font-serif: var(--font-ancizar-serif), Georgia, 'Times New Roman', serif;
+  --font-fleur-de-leah: var(--font-fleur-de-leah);
+  --font-rouge: var(--font-rouge);
 }
 
 /* Base reset for full-viewport layout */

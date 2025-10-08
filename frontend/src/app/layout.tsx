@@ -21,6 +21,22 @@ const licorice = localFont({
   display: 'swap',
 })
 
+const rouge = localFont({
+  src: '../../public/fonts/RougeScript-Regular.ttf',
+  variable: '--font-rouge',
+  weight: '400',
+  style: 'normal',
+  display: 'swap',
+})
+
+const fleurDeLeah = localFont({
+  src: '../../public/fonts/FleurDeLeah-Regular.ttf',
+  variable: '--font-fleur-de-leah',
+  weight: '400',
+  style: 'normal',
+  display: 'swap',
+})
+
 // Inter variable family: include normal and italic axes so all styles resolve
 const inter = localFont({
   src: [
@@ -64,7 +80,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${licorice.variable} ${inter.variable} ${ancizarSerif.variable} ${ancizarSans.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${licorice.variable} ${inter.variable} ${ancizarSerif.variable} ${ancizarSans.variable} ${fleurDeLeah.variable} ${rouge.variable} antialiased`}
       >
         <div
           aria-hidden="true"

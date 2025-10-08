@@ -83,12 +83,12 @@ export default function WinnerCelebration({ open, winners, onDismiss }: WinnerCe
           className="w-full max-w-md rounded-3xl border border-white/10 bg-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.35)] p-6 text-center text-gray-100 select-none"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="text-xs uppercase tracking-wider text-yellow-300/90">Champion</div>
-          <div className="mt-2 text-3xl sm:text-4xl font-semibold text-gray-50">
+          <div className="text-6xl font-fleur-de-leah tracking-wider text-yellow-300/90">Champion</div>
+          <div className="mt-2 text-3xl font-ancizar-sans sm:text-4xl text-gray-50">
             {title}
           </div>
           {winners[0] && (
-            <div className="mt-2 text-sm text-gray-300">Score: {winners[0].score}%</div>
+            <div className="mt-2 text-sm font-ancizar-sans text-gray-300">Score: {winners[0].score}%</div>
           )}
           <button
             className="mt-5 inline-flex items-center justify-center px-4 py-2 rounded-xl bg-neutral-200 text-neutral-900 hover:bg-gray-400 transition"
