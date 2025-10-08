@@ -24,7 +24,8 @@ export default function Piano({ onKeyClick, disabled, highlightIndex = -1 } : { 
         style={{ background: 'radial-gradient(900px 280px at 50% -10%, rgba(255,255,255,0.12), transparent)' }} />
       <div className="relative flex justify-center gap-2 sm:gap-3 select-none">
         {notes.map((note, idx) => {
-          const rainbow = ['#f87171','#fbbf24','#facc15','#4ade80','#60a5fa','#a78bfa','#f472b6'];
+          // Distinct ROYGBIV palette 
+          const rainbow = ['#FF4D4D','#FF7A00','#FFD400','#22C55E','#3B82F6','#6A5ACD','#C084FC'];
           const glow = rainbow[idx % rainbow.length];
           const isHighlighted = highlightIndex === idx;
           return (
