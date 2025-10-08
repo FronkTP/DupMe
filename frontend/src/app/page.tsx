@@ -207,7 +207,7 @@ export default function Home() {
           if (clickGlowTimeoutRef.current) window.clearTimeout(clickGlowTimeoutRef.current);
           clickGlowTimeoutRef.current = window.setTimeout(() => { setHighlightIndex(-1); setHighlightColor(null); }, 200);
         }
-        if (audioReady) playBeep(isCorrect ? 880 : 220, 200, 0.05);
+        if (audioReady) playBeep(isCorrect ? 880 : 220, 200, 0.9);
         replicateLocalIndexRef.current = localIdx + 1;
       }
     } else {
