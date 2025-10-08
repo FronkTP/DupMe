@@ -258,8 +258,8 @@ export default function Home() {
 
       <section className="flex-1 flex flex-col items-center justify-center px-6 pb-28 pt-4 space-y-8 overflow-y-auto">
         <div className="text-center space-y-4">
-          <h1 className="text-6xl font-semibold text-gray-50 tracking-tight">DupMe</h1>
-          <p className="text-sm text-gray-200">
+          <h1 className="text-8xl font-semibold font-licorice text-gray-50 tracking-tight">DupMe</h1>
+          <p className="text-lg text-gray-200">
             {!room
               ? "Welcome!"
               : phase === 'create'
