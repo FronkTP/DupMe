@@ -11,7 +11,7 @@ import { Music } from 'lucide-react';
 import { ensureAudioContext, playSequence, playBeep } from './utils/audio';
 
 // Socket endpoint for the backend
-const SOCKET_URL = 'http://localhost:6996'; // ip of the host
+const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:6996';
 
 // Shapes we expect from the server
 type Player = { id: string; score: number };
@@ -59,7 +59,7 @@ export default function Home() {
 
   useEffect(() => {
     // Open socket connection once
-    const newSocket = io(SOCKET_URL);
+    const newSocket = io(SOCKET_URL, { transports: ['websocket'] });
     setSocket(newSocket);
 
     // Wire up server events

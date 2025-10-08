@@ -1,0 +1,25 @@
+# fly.toml app configuration file generated for backend-old-cherry-4905 on 2025-10-08T12:42:15+07:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = "backend-old-cherry-4905"
+primary_region = "sin"
+
+[build]
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+[env]
+  PORT = "3000"
+
+[[vm]]
+  memory = "1gb"
+  cpu_kind = "shared"
+  cpus = 1

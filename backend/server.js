@@ -8,14 +8,32 @@ import { makeGameApi } from './game.js';
 
 
 const app = express();
-app.use(cors());
+// CORS allowlist from env (comma-separated)
+const FRONTEND_ORIGINS = (process.env.CORS_ORIGINS || 'http://localhost:3000')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+app.use(cors({
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true);
+    if (FRONTEND_ORIGINS.includes(origin)) return cb(null, true);
+    return cb(new Error('Not allowed by CORS'));
+  },
+  methods: ['GET','POST'],
+}));
+// simple health endpoint for platform checks
+app.get('/health', (_req, res) => res.status(200).send('ok'));
 const server = http.createServer(app);
 const PORT = process.env.PORT || 6996;
 
 const io = new Server(server, {
   cors: {
-    origin: ["http://localhost:3000", "http://10.98.94.14:3000", "http://10.98.94.191:3000"], // ip of the host, ip of the client
-    methods: ["GET", "POST"]
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true);
+      if (FRONTEND_ORIGINS.includes(origin)) return cb(null, true);
+      return cb(new Error('Not allowed by CORS'));
+    },
+    methods: ["GET", "POST"],
   }
 });
 
