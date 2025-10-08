@@ -1,15 +1,23 @@
 // Minimal Web Audio helpers for scheduling simple tones
 
-let audioCtx: (AudioContext | null) = null;
+let audioCtx: AudioContext | null = null;
+
+declare global {
+  interface Window {
+    webkitAudioContext?: typeof AudioContext;
+  }
+}
 
 export const ensureAudioContext = async (): Promise<boolean> => {
-  const Ctor = (window as any).AudioContext || (window as any).webkitAudioContext;
+  if (typeof window === 'undefined') return false;
+  const Ctor = window.AudioContext || window.webkitAudioContext;
   if (!Ctor) return false;
   if (!audioCtx) audioCtx = new Ctor();
-  if (audioCtx.state === 'suspended') {
-    try { await audioCtx.resume(); } catch (_) { /* ignore */ }
+  const ctx = audioCtx;
+  if (ctx.state === 'suspended') {
+    try { await ctx.resume(); } catch { /* ignore */ }
   }
-  return audioCtx.state === 'running' || audioCtx.state === 'interrupted';
+  return ctx.state === 'running' || ctx.state === 'interrupted';
 };
 
 const noteToFrequency = (note: string): number | null => {
@@ -37,7 +45,8 @@ type PlaySequenceOptions = {
 export const playSequence = async (notes: string[], opts: PlaySequenceOptions = {}): Promise<void> => {
   if (!notes || notes.length === 0) return;
   const ok = await ensureAudioContext();
-  if (!ok || !audioCtx) return;
+  const ctx = audioCtx;
+  if (!ok || !ctx) return;
 
   const noteSec = (opts.noteMs ?? 450) / 1000;
   const gapSec = (opts.gapMs ?? 100) / 1000;
@@ -45,25 +54,44 @@ export const playSequence = async (notes: string[], opts: PlaySequenceOptions = 
   const release = (opts.releaseMs ?? 80) / 1000;
   const waveform: OscillatorType = opts.waveform ?? 'triangle';
 
-  let t = audioCtx.currentTime + 0.05; // small lead-in for stability
+  let t = ctx.currentTime + 0.05; // small lead-in for stability
   for (const n of notes) {
     const freq = noteToFrequency(n);
     const dur = noteSec;
     if (freq) {
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
       osc.type = waveform;
       osc.frequency.value = freq;
       gain.gain.setValueAtTime(0, t);
       gain.gain.linearRampToValueAtTime(0.9, t + attack);
       gain.gain.setValueAtTime(0.9, t + dur - release);
       gain.gain.linearRampToValueAtTime(0.0001, t + dur);
-      osc.connect(gain).connect(audioCtx.destination);
+      osc.connect(gain).connect(ctx.destination);
       osc.start(t);
       osc.stop(t + dur + 0.01);
     }
     t += noteSec + gapSec;
   }
+};
+
+export const playBeep = async (frequencyHz: number, durationMs: number, volume = 0.06): Promise<void> => {
+  const ok = await ensureAudioContext();
+  const ctx = audioCtx;
+  if (!ok || !ctx) return;
+  const now = ctx.currentTime + 0.01;
+  const dur = Math.max(0.04, durationMs / 1000);
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = 'sine';
+  osc.frequency.value = frequencyHz;
+  gain.gain.setValueAtTime(0, now);
+  gain.gain.linearRampToValueAtTime(volume, now + 0.02);
+  gain.gain.setValueAtTime(volume, now + dur - 0.05);
+  gain.gain.linearRampToValueAtTime(0.0001, now + dur);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start(now);
+  osc.stop(now + dur + 0.02);
 };
 
 

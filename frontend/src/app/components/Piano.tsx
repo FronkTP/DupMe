@@ -3,7 +3,7 @@
 // An array representing the notes on our piano
 const notes = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
 
-export default function Piano({ onKeyClick, disabled, highlightIndex = -1 } : { onKeyClick: (note: string) => void, disabled?: boolean, highlightIndex?: number }) {
+export default function Piano({ onKeyClick, disabled, highlightIndex = -1, highlightColor } : { onKeyClick: (note: string) => void, disabled?: boolean, highlightIndex?: number, highlightColor?: string | null }) {
   const labelFor = (n: string) => {
     const u = (n || '').toUpperCase();
     const octave = '4'; // match audio mapping C4–B4
@@ -28,6 +28,7 @@ export default function Piano({ onKeyClick, disabled, highlightIndex = -1 } : { 
           const rainbow = ['#FF4D4D','#FF7A00','#FFD400','#22C55E','#3B82F6','#6A5ACD','#C084FC'];
           const glow = rainbow[idx % rainbow.length];
           const isHighlighted = highlightIndex === idx;
+          const overlayColor = isHighlighted && highlightColor ? highlightColor : glow;
           return (
           <button
             key={note}
@@ -48,7 +49,7 @@ export default function Piano({ onKeyClick, disabled, highlightIndex = -1 } : { 
               style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.6) 0%, rgba(255,255,255,0) 40%)' }} />
             {isHighlighted && (
               <span aria-hidden className="pointer-events-none absolute -inset-1 rounded-2xl blur-md opacity-80"
-                style={{ background: glow }} />
+                style={{ background: overlayColor }} />
             )}
           </button>
           );

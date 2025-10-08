@@ -16,13 +16,14 @@ type RoomViewProps = {
   results: Array<{ id: string; nickname: string | null; score: number }> | null;
   isCreator: boolean;
   highlightIndex: number;
+  highlightColor: string | null;
   remainingSeconds: number | null;
   onLeave: () => void;
   onReady: (ready: boolean) => void;
   onKeyClick: (note: string) => void;
 };
 
-export default function RoomView({ room, phase, banner, canPlay, replicatePattern, results, isCreator, highlightIndex, remainingSeconds, onLeave, onReady, onKeyClick }: RoomViewProps) {
+export default function RoomView({ room, phase, banner, canPlay, replicatePattern, results, isCreator, highlightIndex, highlightColor, remainingSeconds, onLeave, onReady, onKeyClick }: RoomViewProps) {
   const labelFor = (n: string) => {
     const u = (n || '').toUpperCase();
     const octave = '4';
@@ -74,13 +75,13 @@ export default function RoomView({ room, phase, banner, canPlay, replicatePatter
 
       {(phase === 'demo' || phase === 'create' || phase === 'replicate' || phase === 'ended') && (
         <div className="mt-2">
-          <Piano onKeyClick={onKeyClick} disabled={!canPlay} highlightIndex={highlightIndex} />
+          <Piano onKeyClick={onKeyClick} disabled={!canPlay} highlightIndex={highlightIndex} highlightColor={highlightColor} />
         </div>
       )}
 
       {phase === 'playback' && (
 		<div className="mt-2">
-		  <Piano onKeyClick={onKeyClick} disabled={true} highlightIndex={-1} />
+		  <Piano onKeyClick={onKeyClick} disabled={true} highlightIndex={-1} highlightColor={null} />
 		</div>
 	  )}
 

@@ -8,7 +8,7 @@ import RoomView from './components/ui/RoomView';
 import TrafficLights from './components/ui/TrafficLights';
 import WinnerCelebration from './components/ui/WinnerCelebration';
 import { Music } from 'lucide-react';
-import { ensureAudioContext, playSequence } from './utils/audio';
+import { ensureAudioContext, playSequence, playBeep } from './utils/audio';
 
 // Socket endpoint for the backend
 const SOCKET_URL = 'http://localhost:6996'; // ip of the host
@@ -52,7 +52,9 @@ export default function Home() {
   const [demoNoteMs, setDemoNoteMs] = useState<number>(500);
   const [demoGapMs, setDemoGapMs] = useState<number>(150);
   const [highlightIndex, setHighlightIndex] = useState<number>(-1);
+  const [highlightColor, setHighlightColor] = useState<string | null>(null);
   const clickGlowTimeoutRef = useRef<number | null>(null);
+  const replicateLocalIndexRef = useRef<number>(0);
 
 
   useEffect(() => {
@@ -176,10 +178,10 @@ export default function Home() {
     // schedule highlighting using timeouts to ensure exact sequence
     const timeouts: number[] = [];
     for (let i = 0; i < seq.length; i++) {
-      const id = window.setTimeout(() => setHighlightIndex(i), i * (demoNoteMs + demoGapMs));
+      const id = window.setTimeout(() => { setHighlightIndex(i); setHighlightColor(null); }, i * (demoNoteMs + demoGapMs));
       timeouts.push(id);
     }
-    const clearId = window.setTimeout(() => setHighlightIndex(-1), seq.length * (demoNoteMs + demoGapMs));
+    const clearId = window.setTimeout(() => { setHighlightIndex(-1); setHighlightColor(null); }, seq.length * (demoNoteMs + demoGapMs));
     timeouts.push(clearId);
     return () => { timeouts.forEach((id) => window.clearTimeout(id)); };
   }, [phase, audioReady, phaseEndsAt, demoSequence, demoNoteMs, demoGapMs]);
@@ -192,16 +194,32 @@ export default function Home() {
   // Send a note to the server; server decides how to route it
   const handlePianoKeyClick = (note: string) => {
     if (!socket) return;
-    // Local visual feedback for both creator (create phase) and replicators
     const idx = ['C','D','E','F','G','A','B'].indexOf((note || '').toUpperCase());
-    if (idx >= 0) {
-      setHighlightIndex(idx);
-      if (clickGlowTimeoutRef.current) window.clearTimeout(clickGlowTimeoutRef.current);
-      clickGlowTimeoutRef.current = window.setTimeout(() => setHighlightIndex(-1), 200);
-    }
-    // Local audio feedback only for creator during create
-    if (isCreator && phase === 'create' && audioReady) {
-      playSequence([note], { noteMs: 250, gapMs: 0, waveform: 'triangle' });
+    if (!isCreator && phase === 'replicate') {
+      const pattern = replicatePattern || [];
+      const localIdx = replicateLocalIndexRef.current;
+      if (localIdx < pattern.length) {
+        const expected = (pattern[localIdx] || '').toUpperCase();
+        const isCorrect = (note || '').toUpperCase() === expected;
+        if (idx >= 0) {
+          setHighlightIndex(idx);
+          setHighlightColor(isCorrect ? '#22C55E' : '#EF4444');
+          if (clickGlowTimeoutRef.current) window.clearTimeout(clickGlowTimeoutRef.current);
+          clickGlowTimeoutRef.current = window.setTimeout(() => { setHighlightIndex(-1); setHighlightColor(null); }, 200);
+        }
+        if (audioReady) playBeep(isCorrect ? 880 : 220, 200, 0.05);
+        replicateLocalIndexRef.current = localIdx + 1;
+      }
+    } else {
+      if (idx >= 0) {
+        setHighlightIndex(idx);
+        setHighlightColor(null);
+        if (clickGlowTimeoutRef.current) window.clearTimeout(clickGlowTimeoutRef.current);
+        clickGlowTimeoutRef.current = window.setTimeout(() => { setHighlightIndex(-1); setHighlightColor(null); }, 200);
+      }
+      if (isCreator && phase === 'create' && audioReady) {
+        playSequence([note], { noteMs: 250, gapMs: 0, waveform: 'triangle' });
+      }
     }
     socket.emit('CLIENT:SUBMIT_NOTE', note);
   };
@@ -309,6 +327,7 @@ export default function Home() {
                 results={results}
                 isCreator={isCreator}
                 highlightIndex={highlightIndex}
+                highlightColor={highlightColor}
                 remainingSeconds={remainingSeconds}
                 onLeave={leaveRoom}
                 onReady={async (ready) => { await ensureAudio(); socket?.emit('ROOMS:READY', ready); }}
