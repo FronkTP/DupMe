@@ -3,7 +3,7 @@ import { rooms } from './rooms.js';
 
 // Broadcast helpers are provided by the host server file via callbacks
 
-export const makeGameApi = ({ getPlayersState, broadcastRoom, broadcastGameState, io }) => {
+export const makeGameApi = ({ getPlayersState, broadcastRoom, broadcastGameState, io, persistResults }) => {
   // Start a new game in the room
   const startGame = (roomId) => {
     const room = rooms[roomId];
@@ -94,6 +94,7 @@ export const makeGameApi = ({ getPlayersState, broadcastRoom, broadcastGameState
     const room = rooms[roomId];
     if (!room || !room.game) return;
     const pattern = room.game.pattern || [];
+    const rows = [];
     Object.keys(room.players).forEach((sid) => {
       if (sid === room.game.creatorId) return;
       const sub = (room.game.submissions[sid] || []);
@@ -108,7 +109,13 @@ export const makeGameApi = ({ getPlayersState, broadcastRoom, broadcastGameState
       const p = getPlayersState()[sid];
       if (!p) return;
       p.score = toPercent(room.game.scores[sid], room.game.attempts[sid]);
+      const sock = io.sockets.sockets.get(sid);
+      const userId = sock?.data?.userId || null;
+      if (userId) {
+        rows.push({ userId, correct: room.game.scores[sid], attempts: room.game.attempts[sid], percent: p.score, nickname: getPlayersState()[sid]?.nickname || '' });
+      }
     });
+    if (persistResults && rows.length > 0) persistResults(rows);
     broadcastGameState();
     if (room.game.roundIndex + 1 < room.game.order.length) {
       room.game.roundIndex += 1;

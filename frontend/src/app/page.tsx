@@ -35,6 +35,7 @@ export default function Home() {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [rooms, setRooms] = useState<RoomListItem[]>([]);
   const [room, setRoom] = useState<RoomSnapshot | null>(null);
+  const [userId, setUserId] = useState<string>("");
 
   // In-room status
   const [roomBanner, setRoomBanner] = useState<string>("");
@@ -55,6 +56,10 @@ export default function Home() {
   const [highlightColor, setHighlightColor] = useState<string | null>(null);
   const clickGlowTimeoutRef = useRef<number | null>(null);
   const replicateLocalIndexRef = useRef<number>(0);
+  type LeaderRow = { user_id: string; nickname: string; best: number };
+  const [lbAll, setLbAll] = useState<LeaderRow[]>([]);
+  const [lbWeek, setLbWeek] = useState<LeaderRow[]>([]);
+  const [lbTab, setLbTab] = useState<'all'|'week'>('all');
 
 
   useEffect(() => {
@@ -66,6 +71,21 @@ export default function Home() {
     newSocket.on('connect', () => {
       console.log(`✅ Connected! My ID is ${newSocket.id}`);
       setMyId(newSocket.id ?? null);
+      // Stable user id (localStorage)
+      const key = 'dupme_uid';
+      let uid = '';
+      try { uid = localStorage.getItem(key) || ''; } catch {}
+      if (!uid) {
+        try {
+          uid = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+            ? crypto.randomUUID()
+            : `${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`;
+        } catch {
+          uid = `${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`;
+        }
+        try { localStorage.setItem(key, uid); } catch {}
+      }
+      setUserId(uid);
     });
 
     newSocket.on('gameStateUpdate', (newState: GameState) => {
@@ -115,6 +135,8 @@ export default function Home() {
       setRoomBanner('Game over');
       setPhaseEndsAt(null);
       setWinnerOverlayOpen(true);
+      // Refresh leaderboard on game end
+      void fetchLeaderboard();
     });
     newSocket.on('SERVER:PATTERN', (payload: { roomId: string; pattern: string[] }) => {
       if (!payload?.pattern) return;
@@ -229,10 +251,10 @@ export default function Home() {
     if (!socket) return;
     const clean = nickname.trim();
     if (!clean) return;
-    socket.emit('CLIENT:SET_NICKNAME', clean);
+    socket.emit('CLIENT:SET_NICKNAME', { nickname: clean, userId });
     setHasNick(true);
     await ensureAudio();
-  }, [socket, nickname]);
+  }, [socket, nickname, userId]);
 
   // Lobby actions
   const createRoom = (name: string, capacity: number) => {
@@ -255,6 +277,21 @@ export default function Home() {
     const ok = await ensureAudioContext();
     if (ok) setAudioReady(true);
   };
+
+  // Fetch leaderboard (all + week)
+  const fetchLeaderboard = useCallback(async () => {
+    try {
+      const base = SOCKET_URL;
+      const [ra, rw] = await Promise.all([
+        fetch(`${base}/leaderboard?range=all`).then(r=>r.json()).catch(()=>[]),
+        fetch(`${base}/leaderboard?range=week`).then(r=>r.json()).catch(()=>[]),
+      ]);
+      setLbAll(Array.isArray(ra) ? ra : []);
+      setLbWeek(Array.isArray(rw) ? rw : []);
+    } catch { /* noop */ }
+  }, []);
+
+  useEffect(() => { void fetchLeaderboard(); }, [fetchLeaderboard]);
 
   // Keyboard controls: map keys to notes (left-to-right)
   const KEY_TO_NOTE = useMemo(() => ({
@@ -298,8 +335,11 @@ export default function Home() {
         <div className="flex items-center gap-4">
           <TrafficLights />
           <OnlineUsers users={Object.values(gameState?.players || {}).map(p => ({ id: p.id, nickname: p.nickname, score: p.score }))} />
+          <a className="text-gray-200 text-3xl font-rouge hover:text-white" href="/leaderboard">Leaderboard</a>
         </div>
-        <div className="text-xs">ID: {myId}</div>
+        <div className="text-xs flex items-center gap-3">
+          <span>UID: {userId || '...'}</span>
+        </div>
       </header>
 
       <section className="flex-1 flex flex-col items-center justify-center px-6 pb-28 pt-4 space-y-8 overflow-y-auto">
@@ -343,6 +383,25 @@ export default function Home() {
           !room ? (
             <div className="w-full max-w-2xl mx-auto">
               <Lobby rooms={rooms} onCreate={createRoom} onJoin={joinRoom} />
+              {(lbAll.length > 0 || lbWeek.length > 0) && (
+                <div className="mt-6 p-5 rounded-2xl bg-[#272725] text-gray-100">
+                  <div className="flex items-center justify-between mb-3">
+                    <h2 className="text-sm font-semibold">Leaderboard</h2>
+                    <div className="flex gap-2 text-xs">
+                      <button onClick={()=>setLbTab('all')} className={lbTab==='all'? 'px-2 py-1 rounded bg-white/10' : 'px-2 py-1 rounded bg-white/5'}>All‑time</button>
+                      <button onClick={()=>setLbTab('week')} className={lbTab==='week'? 'px-2 py-1 rounded bg-white/10' : 'px-2 py-1 rounded bg-white/5'}>This week</button>
+                    </div>
+                  </div>
+                  <ul className="space-y-1 text-sm">
+                    {(lbTab==='all'? lbAll : lbWeek).map((r, idx) => (
+                      <li key={r.user_id+idx} className="flex justify-between">
+                        <span>{r.nickname || r.user_id.slice(0,6)}</span>
+                        <span>{r.best}%</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           ) : (
             <div className="w-full max-w-2xl mx-auto">
@@ -361,6 +420,25 @@ export default function Home() {
                 onReady={async (ready) => { await ensureAudio(); socket?.emit('ROOMS:READY', ready); }}
                 onKeyClick={handlePianoKeyClick}
               />
+              {phase === 'game_over' && (lbAll.length > 0 || lbWeek.length > 0) && (
+                <div className="mt-6 p-5 rounded-2xl bg-[#272725] text-gray-100">
+                  <div className="flex items-center justify-between mb-3">
+                    <h2 className="text-sm font-semibold">Leaderboard</h2>
+                    <div className="flex gap-2 text-xs">
+                      <button onClick={()=>setLbTab('all')} className={lbTab==='all'? 'px-2 py-1 rounded bg-white/10' : 'px-2 py-1 rounded bg-white/5'}>All‑time</button>
+                      <button onClick={()=>setLbTab('week')} className={lbTab==='week'? 'px-2 py-1 rounded bg-white/10' : 'px-2 py-1 rounded bg-white/5'}>This week</button>
+                    </div>
+                  </div>
+                  <ul className="space-y-1 text-sm">
+                    {(lbTab==='all'? lbAll : lbWeek).map((r, idx) => (
+                      <li key={r.user_id+idx} className="flex justify-between">
+                        <span>{r.nickname || r.user_id.slice(0,6)}</span>
+                        <span>{r.best}%</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           )
         )}

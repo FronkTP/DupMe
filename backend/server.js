@@ -5,6 +5,8 @@ import express from 'express';
 import { toPercent } from './utils.js';
 import { rooms, listRooms, createRoom, getRoomSnapshot, CREATE_MAX_NOTES } from './rooms.js';
 import { makeGameApi } from './game.js';
+import pkg from 'pg';
+const { Pool } = pkg;
 
 
 const app = express();
@@ -36,6 +38,34 @@ const io = new Server(server, {
     methods: ["GET", "POST"],
   }
 });
+
+// --- Neon Postgres (optional, enabled if DATABASE_URL is present) ---
+let db = null;
+if (process.env.DATABASE_URL) {
+  db = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+  // Minimal schema: users and results
+  (async () => {
+    try {
+      await db.query(`create table if not exists users (
+        user_id text primary key,
+        latest_nickname text,
+        created_at timestamptz default now()
+      )`);
+      await db.query(`create table if not exists results (
+        id bigserial primary key,
+        user_id text references users(user_id),
+        correct int not null,
+        attempts int not null,
+        percent int not null,
+        created_at timestamptz default now()
+      )`);
+      await db.query(`alter table results add column if not exists nickname text`);
+      console.log('✅ Neon schema ready');
+    } catch (e) {
+      console.error('❌ Neon init failed', e);
+    }
+  })();
+}
 
 
 
@@ -75,6 +105,15 @@ const { startGame } = makeGameApi({
   broadcastRoom: (roomId) => io.to(roomId).emit('SERVER:ROOM', getRoomSnapshot(roomId, gameState.players)),
   broadcastGameState: () => broadcastGameState(),
   io,
+  persistResults: async (rows) => {
+    if (!db || !Array.isArray(rows) || rows.length === 0) return;
+    for (const r of rows) {
+      if (!r?.userId) continue;
+      try {
+        await db.query('insert into results(user_id, correct, attempts, percent, nickname) values($1,$2,$3,$4,$5)', [String(r.userId), Number(r.correct)||0, Number(r.attempts)||0, Number(r.percent)||0, String(r.nickname || '')]);
+      } catch {}
+    }
+  }
 });
 
 const broadcastRooms = () => io.emit('SERVER:ROOMS', listRooms());
@@ -96,6 +135,7 @@ io.on('connection', (socket) => {
     id: socket.id,
     score: 0,
     nickname: null,
+    userId: null,
   };
 
   broadcastGameState();
@@ -104,11 +144,21 @@ io.on('connection', (socket) => {
   broadcastRooms();
 
   // Set nickname for this socket
-  socket.on('CLIENT:SET_NICKNAME', (nickname) => {
+  socket.on('CLIENT:SET_NICKNAME', (payload) => {
     const player = gameState.players[socket.id];
     if (!player) return;
+    const { nickname, userId } = (typeof payload === 'object' && payload) ? payload : { nickname: payload, userId: null };
     const clean = String(nickname || '').trim().slice(0, 20);
     player.nickname = clean || `Player-${socket.id.slice(0,4)}`;
+    // Attach stable userId to this socket for later persistence (if set)
+    if (userId) {
+      socket.data.userId = String(userId);
+      player.userId = String(userId);
+    }
+    // Upsert user in Neon if enabled
+    if (db && userId) {
+      db.query('insert into users(user_id, latest_nickname) values($1,$2) on conflict (user_id) do update set latest_nickname=excluded.latest_nickname', [String(userId), player.nickname]).catch(()=>{});
+    }
     broadcastGameState();
   });
 
@@ -250,5 +300,87 @@ function leaveRoom(socket) {
 
 server.listen(PORT, () => {
   console.log(`🚀 Server is running and listening on port ${PORT}`);
+});
+
+// Leaderboard API
+app.get('/leaderboard', async (req, res) => {
+  if (!db) { res.json([]); return; }
+  const range = String(req.query.range || 'all');
+  const filter = range === 'week' ? "where r.created_at >= now() - interval '7 days'" : '';
+  try {
+    const sql = `with scoped as (
+                   select r.user_id, r.percent, r.attempts, r.correct, r.created_at,
+                          coalesce(nullif(r.nickname,''), u.latest_nickname) as nickname
+                   from results r left join users u on u.user_id = r.user_id
+                   ${filter}
+                 ),
+                 best as (
+                   select distinct on (user_id)
+                          user_id, nickname, percent as best, attempts as attempts_at_best, created_at as best_at
+                   from scoped
+                   order by user_id, percent desc, attempts desc, created_at asc
+                 ),
+                 agg as (
+                   select user_id,
+                          sum(correct) as total_correct,
+                          sum(attempts) as total_attempts,
+                          count(*) as games_played,
+                          max(created_at) as last_played
+                   from scoped
+                   group by user_id
+                 )
+                 select b.user_id, b.nickname, b.best, b.attempts_at_best,
+                        a.games_played, a.total_attempts, a.total_correct, a.last_played
+                 from best b join agg a using (user_id)
+                 order by b.best desc, b.attempts_at_best desc, a.last_played desc
+                 limit 50`;
+    const { rows } = await db.query(sql);
+    res.json(rows || []);
+  } catch (e) {
+    res.status(500).json({ error: 'leaderboard_failed' });
+  }
+});
+
+app.get('/leaderboard/me', async (req, res) => {
+  if (!db) { res.json({ summary: null, recent: [] }); return; }
+  const userId = String(req.query.userId || '')
+  if (!userId) { res.json({ summary: null, recent: [] }); return; }
+  try {
+    const sqlSummary = `with s as (
+                          select r.user_id, r.percent, r.attempts, r.correct, r.created_at,
+                                 coalesce(nullif(r.nickname,''), u.latest_nickname) as nickname
+                          from results r left join users u on u.user_id = r.user_id
+                          where r.user_id = $1
+                        ),
+                        best as (
+                          select distinct on (user_id)
+                                 user_id, nickname, percent as best, attempts as attempts_at_best, created_at as best_at
+                          from s
+                          order by user_id, percent desc, attempts desc, created_at asc
+                        ),
+                        agg as (
+                          select user_id,
+                                 sum(correct) as total_correct,
+                                 sum(attempts) as total_attempts,
+                                 count(*) as games_played,
+                                 max(created_at) as last_played
+                          from s
+                          group by user_id
+                        )
+                        select b.user_id, b.nickname, b.best, b.attempts_at_best,
+                               a.games_played, a.total_attempts, a.total_correct, a.last_played
+                        from best b join agg a using (user_id)`;
+    const { rows: srows } = await db.query(sqlSummary, [userId]);
+    const sqlRecent = `select coalesce(nullif(r.nickname,''), u.latest_nickname) as nickname,
+                              percent, attempts, correct, created_at
+                       from results r left join users u on u.user_id=r.user_id
+                       where r.user_id = $1
+                       order by created_at desc
+                       limit 10`;
+    const { rows: rrows } = await db.query(sqlRecent, [userId]);
+    res.json({ summary: srows?.[0] || null, recent: rrows || [] });
+  } catch (e) {
+    res.status(500).json({ summary: null, recent: [], error: 'leaderboard_me_failed' });
+  }
 });
 

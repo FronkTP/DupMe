@@ -48,9 +48,8 @@ p {
   font-family: var(--font-serif);
 }
 
-/* Links inherit but emphasize with sans */
 a {
-  font-family: var(--font-sans);
+  cursor: pointer;
 }
 
 /* Small text and UI labels use clean sans */
