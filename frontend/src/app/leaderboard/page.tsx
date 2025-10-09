@@ -47,6 +47,14 @@ export default function LeaderboardPage() {
 
   const rows = tab==='all' ? allRows : weekRows;
 
+  const MiniRing = () => (
+    <svg width="12" height="12" viewBox="0 0 20 20">
+      <circle cx="10" cy="10" r="8" stroke="rgba(255,255,255,0.2)" strokeWidth="3" fill="none" />
+      <circle cx="10" cy="10" r="8" stroke="white" strokeWidth="3" fill="none"
+        strokeDasharray={`30 50.265`} strokeLinecap="round" transform="rotate(-90 10 10)" />
+    </svg>
+  );
+
   return (
     <main className="min-h-screen p-6 w-full text-gray-100">
       <div className="max-w-2xl mx-auto">
@@ -58,12 +66,17 @@ export default function LeaderboardPage() {
         </div>
         <div className="p-5 rounded-2xl bg-[#272725]">
           {rows.length === 0 ? (
-            <div className="text-sm text-gray-300">No entries yet. Play a round to appear here.</div>
+            <div className="text-sm text-gray-300">
+              No entries yet.
+              <div className="mt-2 text-gray-400">
+                Tip: Click Ready and finish a round. Scores are stored per device; use the same browser to build your record.
+              </div>
+            </div>
           ) : (
             <div className="text-sm">
               <div className="grid grid-cols-6 gap-2 pb-2 border-b border-white/10 text-gray-300">
                 <div>Player</div>
-                <div className="text-right">Best</div>
+                <div className="text-right flex items-center justify-end gap-2"><MiniRing /> Best</div>
                 <div className="text-right">Attempts@Best</div>
                 <div className="text-right">Games</div>
                 <div className="text-right">Total Att.</div>

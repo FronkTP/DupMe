@@ -45,6 +45,7 @@ export default function Home() {
   const [results, setResults] = useState<Array<{ id: string; nickname: string | null; score: number }> | null>(null);
   const [winnerOverlayOpen, setWinnerOverlayOpen] = useState<boolean>(false);
   const [phaseEndsAt, setPhaseEndsAt] = useState<number | null>(null);
+  const [phaseStartAt, setPhaseStartAt] = useState<number | null>(null);
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
   const [audioReady, setAudioReady] = useState<boolean>(false);
   const [lastPlaybackEndsAt, setLastPlaybackEndsAt] = useState<number | null>(null);
@@ -56,6 +57,7 @@ export default function Home() {
   const [highlightColor, setHighlightColor] = useState<string | null>(null);
   const clickGlowTimeoutRef = useRef<number | null>(null);
   const replicateLocalIndexRef = useRef<number>(0);
+  const [timerProgress, setTimerProgress] = useState<number>(0);
   type LeaderRow = { user_id: string; nickname: string; best: number };
   const [lbAll, setLbAll] = useState<LeaderRow[]>([]);
   const [lbWeek, setLbWeek] = useState<LeaderRow[]>([]);
@@ -108,6 +110,7 @@ export default function Home() {
       setReplicatePattern([]);
       setResults(null);
       setPhaseEndsAt(typeof p?.endsAt === 'number' ? p.endsAt : null);
+      setPhaseStartAt(Date.now());
       setWinnerOverlayOpen(false);
     });
     newSocket.on('SERVER:PHASE', (p: PhasePayload) => {
@@ -128,12 +131,14 @@ export default function Home() {
       if (p?.phase === 'replicate') setReplicatePattern(p?.pattern || []);
       if (p?.phase === 'ended') { setReplicatePattern([]); if (p?.results) setResults(p.results); }
       setPhaseEndsAt(typeof p?.endsAt === 'number' ? p.endsAt : null);
+      setPhaseStartAt(typeof p?.endsAt === 'number' ? Date.now() : null);
     });
     newSocket.on('SERVER:GAME_END', (payload: { roomId: string; results: Array<{ id: string; nickname: string | null; score: number }> }) => {
       setPhase('game_over');
       setResults(payload.results || []);
       setRoomBanner('Game over');
       setPhaseEndsAt(null);
+      setPhaseStartAt(null);
       setWinnerOverlayOpen(true);
       // Refresh leaderboard on game end
       void fetchLeaderboard();
@@ -157,10 +162,11 @@ export default function Home() {
     };
   }, []); 
 
-  // Countdown timer derived from server-provided endsAt
+  // Countdown timer + progress derived from server-provided endsAt/startAt
   useEffect(() => {
     if (!phaseEndsAt || !(phase === 'demo' || phase === 'create' || phase === 'playback' || phase === 'replicate')) {
       setRemainingSeconds(null);
+      setTimerProgress(0);
       return;
     }
 
@@ -168,12 +174,19 @@ export default function Home() {
       const msLeft = phaseEndsAt - Date.now();
       const secs = Math.max(0, Math.ceil(msLeft / 1000));
       setRemainingSeconds(secs);
+      if (phaseStartAt && phaseEndsAt) {
+        const total = Math.max(1, phaseEndsAt - phaseStartAt);
+        const done = Math.max(0, Math.min(total, total - msLeft));
+        setTimerProgress(Math.max(0, Math.min(1, done / total)));
+      } else {
+        setTimerProgress(0);
+      }
     };
 
     update();
     const id = setInterval(update, 250);
     return () => clearInterval(id);
-  }, [phaseEndsAt, phase]);
+  }, [phaseEndsAt, phase, phaseStartAt]);
 
   // Auto-play pattern during playback phase once per round
   useEffect(() => {
@@ -416,6 +429,7 @@ export default function Home() {
                 highlightIndex={highlightIndex}
                 highlightColor={highlightColor}
                 remainingSeconds={remainingSeconds}
+                progress={timerProgress}
                 onLeave={leaveRoom}
                 onReady={async (ready) => { await ensureAudio(); socket?.emit('ROOMS:READY', ready); }}
                 onKeyClick={handlePianoKeyClick}

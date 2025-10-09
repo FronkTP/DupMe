@@ -50,7 +50,12 @@ export default function Lobby({ rooms, onCreate, onJoin }: LobbyProps) {
         <div className="p-4 text-gray-200 font-medium">Available rooms</div>
         <ul className="p-2">
           {rooms.length === 0 && (
-            <li className="p-3 text-sm text-gray-200">No rooms yet. Create one!</li>
+            <li className="p-3 text-sm text-gray-200">
+              No rooms yet. Create one!
+              <div className="mt-2 text-xs text-gray-300">
+                Tip: Play a full round to appear on the leaderboard. Scores are stored per device.
+              </div>
+            </li>
           )}
           {rooms.map((r) => (
             <li key={r.id} className="p-3 flex items-center justify-between">

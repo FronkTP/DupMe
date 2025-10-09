@@ -18,17 +18,27 @@ type RoomViewProps = {
   highlightIndex: number;
   highlightColor: string | null;
   remainingSeconds: number | null;
+  progress?: number;
   onLeave: () => void;
   onReady: (ready: boolean) => void;
   onKeyClick: (note: string) => void;
 };
 
-export default function RoomView({ room, phase, banner, canPlay, replicatePattern, results, isCreator, highlightIndex, highlightColor, remainingSeconds, onLeave, onReady, onKeyClick }: RoomViewProps) {
+export default function RoomView({ room, phase, banner, canPlay, replicatePattern, results, isCreator, highlightIndex, highlightColor, remainingSeconds, progress, onLeave, onReady, onKeyClick }: RoomViewProps) {
   const labelFor = (n: string) => {
     const u = (n || '').toUpperCase();
     const octave = '4';
     return ['C','D','E','F','G','A','B'].includes(u) ? `${u}${octave}` : u;
   };
+  const ProgressRing = ({ value }: { value: number }) => (
+    <svg width="20" height="20" viewBox="0 0 20 20" className="-ml-1">
+      <circle cx="10" cy="10" r="8" stroke="rgba(255,255,255,0.2)" strokeWidth="3" fill="none" />
+      {(() => { const C = 2 * Math.PI * 8; const p = Math.max(0, Math.min(1, value)); return (
+        <circle cx="10" cy="10" r="8" stroke="white" strokeWidth="3" fill="none"
+          strokeDasharray={`${p * C} ${C}`} strokeLinecap="round" transform="rotate(-90 10 10)" />
+      ); })()}
+    </svg>
+  );
   return (
     <div className="space-y-4 bg-[#272725] p-4 rounded-2xl text-gray-200">
       <div className="flex items-center justify-between">
@@ -41,7 +51,10 @@ export default function RoomView({ room, phase, banner, canPlay, replicatePatter
           <span>{banner}</span>
           {(phase === 'demo' || phase === 'create' || phase === 'playback' || phase === 'replicate') && typeof remainingSeconds === 'number' && (
             <span className="inline-flex items-center gap-2 px-2 py-1 rounded-lg bg-black/30 border border-white/10 text-xs text-gray-200">
-              <span aria-hidden><Timer size={16} /></span>
+              <span className="flex items-center gap-1" aria-hidden>
+                <ProgressRing value={typeof progress === 'number' ? progress : 0} />
+                <Timer size={16} />
+              </span>
               <span>{phase === 'demo' ? 'Demo' : phase === 'create' ? 'Create' : phase === 'playback' ? 'Playback' : 'Replicate'}: {remainingSeconds}s</span>
             </span>
           )}
