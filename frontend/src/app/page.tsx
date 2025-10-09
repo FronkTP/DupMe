@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useMemo } from 'react';
+import { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import OnlineUsers from './components/ui/OnlineUsers';
 import Lobby from './components/ui/Lobby';
@@ -192,7 +192,7 @@ export default function Home() {
 
 
   // Send a note to the server; server decides how to route it
-  const handlePianoKeyClick = (note: string) => {
+  const handlePianoKeyClick = useCallback((note: string) => {
     if (!socket) return;
     const idx = ['C','D','E','F','G','A','B'].indexOf((note || '').toUpperCase());
     if (!isCreator && phase === 'replicate') {
@@ -222,17 +222,17 @@ export default function Home() {
       }
     }
     socket.emit('CLIENT:SUBMIT_NOTE', note);
-  };
+  }, [socket, isCreator, phase, audioReady, replicatePattern]);
 
   // Save nickname once per connection
-  const submitNickname = async () => {
+  const submitNickname = useCallback(async () => {
     if (!socket) return;
     const clean = nickname.trim();
     if (!clean) return;
     socket.emit('CLIENT:SET_NICKNAME', clean);
     setHasNick(true);
     await ensureAudio();
-  };
+  }, [socket, nickname]);
 
   // Lobby actions
   const createRoom = (name: string, capacity: number) => {
@@ -255,6 +255,34 @@ export default function Home() {
     const ok = await ensureAudioContext();
     if (ok) setAudioReady(true);
   };
+
+  // Keyboard controls: map keys to notes (left-to-right)
+  const KEY_TO_NOTE = useMemo(() => ({
+    'a': 'C', 's': 'D', 'd': 'E', 'f': 'F', 'g': 'G', 'h': 'A', 'j': 'B',
+  } as Record<string, string>), []);
+
+  // Global keydown handler for Enter (nickname) and note keys (create/replicate)
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const key = (e.key || '').toLowerCase();
+      if (key === 'enter') {
+        if (!hasNick) {
+          e.preventDefault();
+          submitNickname();
+        }
+        return;
+      }
+      if (!hasNick) return;
+      if (!(phase === 'create' || phase === 'replicate')) return;
+      if (!canPlay) return;
+      const note = KEY_TO_NOTE[key];
+      if (!note) return;
+      e.preventDefault();
+      handlePianoKeyClick(note);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [hasNick, phase, canPlay, nickname, submitNickname, handlePianoKeyClick, KEY_TO_NOTE]);
 
   // Compute top-score winners (cap to two) when results are present
   const topWinners = useMemo(() => {
