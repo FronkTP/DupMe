@@ -30,15 +30,20 @@ export default function RoomView({ room, phase, banner, canPlay, replicatePatter
     const octave = '4';
     return ['C','D','E','F','G','A','B'].includes(u) ? `${u}${octave}` : u;
   };
-  const ProgressRing = ({ value }: { value: number }) => (
-    <svg width="20" height="20" viewBox="0 0 20 20" className="-ml-1">
-      <circle cx="10" cy="10" r="8" stroke="rgba(255,255,255,0.2)" strokeWidth="3" fill="none" />
-      {(() => { const C = 2 * Math.PI * 8; const p = Math.max(0, Math.min(1, value)); return (
-        <circle cx="10" cy="10" r="8" stroke="white" strokeWidth="3" fill="none"
-          strokeDasharray={`${p * C} ${C}`} strokeLinecap="round" transform="rotate(-90 10 10)" />
-      ); })()}
-    </svg>
-  );
+  const ProgressRing = ({ value }: { value: number }) => {
+    const p = Math.max(0, Math.min(1, value));
+    const C = 2 * Math.PI * 8; // circumference for r=8
+    const hue = 140 - (136 * p); // 140≈green → 4≈red
+    const stroke = `hsl(${hue} 80% 60%)`;
+    return (
+      <svg width="20" height="20" viewBox="0 0 20 20" className="-ml-1">
+        <circle cx="10" cy="10" r="8" stroke="rgba(255,255,255,0.25)" strokeWidth="3" fill="none" />
+        <circle cx="10" cy="10" r="8" stroke={stroke} strokeWidth="3" fill="none"
+          strokeDasharray={`${p * C} ${C}`} strokeLinecap="round" transform="rotate(-90 10 10)"
+          style={{ transition: 'stroke-dasharray 0.2s linear, stroke 0.2s linear' }} />
+      </svg>
+    );
+  };
   return (
     <div className="space-y-4 bg-[#272725] p-4 rounded-2xl text-gray-200">
       <div className="flex items-center justify-between">
