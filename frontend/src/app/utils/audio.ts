@@ -8,6 +8,20 @@ declare global {
   }
 }
 
+type SoundPack = 'soft' | 'classic' | 'retro';
+const PACK_KEY = 'dupme_sound_pack';
+let currentPack: SoundPack = 'classic';
+try {
+  const saved = typeof window !== 'undefined' ? (localStorage.getItem(PACK_KEY) as SoundPack | null) : null;
+  if (saved === 'soft' || saved === 'classic' || saved === 'retro') currentPack = saved;
+} catch {}
+
+export const getSoundPack = (): SoundPack => currentPack;
+export const setSoundPack = (p: SoundPack): void => {
+  currentPack = p;
+  try { localStorage.setItem(PACK_KEY, p); } catch {}
+};
+
 export const ensureAudioContext = async (): Promise<boolean> => {
   if (typeof window === 'undefined') return false;
   const Ctor = window.AudioContext || window.webkitAudioContext;
@@ -50,9 +64,13 @@ export const playSequence = async (notes: string[], opts: PlaySequenceOptions = 
 
   const noteSec = (opts.noteMs ?? 450) / 1000;
   const gapSec = (opts.gapMs ?? 100) / 1000;
-  const attack = (opts.attackMs ?? 10) / 1000;
-  const release = (opts.releaseMs ?? 80) / 1000;
-  const waveform: OscillatorType = opts.waveform ?? 'triangle';
+  const pack = currentPack;
+  const defaultAttackMs = pack === 'soft' ? 15 : pack === 'retro' ? 5 : 10;
+  const defaultReleaseMs = pack === 'soft' ? 100 : pack === 'retro' ? 60 : 80;
+  const attack = (opts.attackMs ?? defaultAttackMs) / 1000;
+  const release = (opts.releaseMs ?? defaultReleaseMs) / 1000;
+  const defaultWave: OscillatorType = pack === 'soft' ? 'sine' : pack === 'retro' ? 'square' : 'triangle';
+  const waveform: OscillatorType = opts.waveform ?? defaultWave;
 
   let t = ctx.currentTime + 0.05; // small lead-in for stability
   for (const n of notes) {

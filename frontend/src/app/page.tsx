@@ -8,7 +8,7 @@ import RoomView from './components/ui/RoomView';
 import TrafficLights from './components/ui/TrafficLights';
 import WinnerCelebration from './components/ui/WinnerCelebration';
 import { Music } from 'lucide-react';
-import { ensureAudioContext, playSequence, playBeep } from './utils/audio';
+import { ensureAudioContext, playSequence, playBeep, getSoundPack, setSoundPack } from './utils/audio';
 
 // Socket endpoint for the backend
 const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:6996';
@@ -62,6 +62,7 @@ export default function Home() {
   const [lbAll, setLbAll] = useState<LeaderRow[]>([]);
   const [lbWeek, setLbWeek] = useState<LeaderRow[]>([]);
   const [lbTab, setLbTab] = useState<'all'|'week'>('all');
+  const [soundPack, setSoundPackState] = useState<string>(() => getSoundPack());
 
 
   useEffect(() => {
@@ -198,7 +199,7 @@ export default function Home() {
     const notes = (replicatePattern && replicatePattern.length > 0) ? replicatePattern : [];
     if (notes.length === 0) return;
     // Determine playback timing from last SERVER:PHASE payload (stored via demoNoteMs/gapMs if playback provided)
-    playSequence(notes, { noteMs: demoNoteMs || 500, gapMs: demoGapMs || 10, waveform: 'triangle' });
+    playSequence(notes, { noteMs: demoNoteMs || 500, gapMs: demoGapMs || 10 });
   }, [phase, audioReady, phaseEndsAt, replicatePattern, lastPlaybackEndsAt, demoNoteMs, demoGapMs]);
 
   // Auto-play demo sequence and schedule highlights
@@ -209,7 +210,7 @@ export default function Home() {
     if (lastDemoEndsAtRef.current === phaseEndsAt) return;
     lastDemoEndsAtRef.current = phaseEndsAt;
     const seq = demoSequence && demoSequence.length ? demoSequence : ['C','D','E','F','G','A','B'];
-    playSequence(seq, { noteMs: demoNoteMs, gapMs: demoGapMs, waveform: 'triangle' });
+    playSequence(seq, { noteMs: demoNoteMs, gapMs: demoGapMs });
     // schedule highlighting using timeouts to ensure exact sequence
     const timeouts: number[] = [];
     for (let i = 0; i < seq.length; i++) {
@@ -253,7 +254,7 @@ export default function Home() {
         clickGlowTimeoutRef.current = window.setTimeout(() => { setHighlightIndex(-1); setHighlightColor(null); }, 200);
       }
       if (isCreator && phase === 'create' && audioReady) {
-        playSequence([note], { noteMs: 250, gapMs: 0, waveform: 'triangle' });
+        playSequence([note], { noteMs: 250, gapMs: 0 });
       }
     }
     socket.emit('CLIENT:SUBMIT_NOTE', note);
@@ -350,7 +351,19 @@ export default function Home() {
           <OnlineUsers users={Object.values(gameState?.players || {}).map(p => ({ id: p.id, nickname: p.nickname, score: p.score }))} />
           <a className="text-gray-200 text-3xl font-rouge hover:text-white" href="/leaderboard">Leaderboard</a>
         </div>
-        <div className="text-xs flex items-center gap-3">
+        <div className="text-xs flex items-center gap-4">
+          <div className="flex items-center gap-1">
+            <span className="text-gray-300">Tone:</span>
+            <select
+              className="px-2 py-1 rounded bg-white/10 text-gray-100 border border-white/10"
+              value={soundPack}
+              onChange={(e) => { const v = e.target.value as 'soft'|'classic'|'retro'; setSoundPack(v); setSoundPackState(v); }}
+            >
+              <option value="soft">Soft</option>
+              <option value="classic">Classic</option>
+              <option value="retro">Retro</option>
+            </select>
+          </div>
           <span>UID: {userId || '...'}</span>
         </div>
       </header>
