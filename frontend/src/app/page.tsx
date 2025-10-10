@@ -349,7 +349,7 @@ export default function Home() {
         <div className="flex items-center gap-4">
           <TrafficLights />
           <OnlineUsers users={Object.values(gameState?.players || {}).map(p => ({ id: p.id, nickname: p.nickname, score: p.score }))} />
-          <a className="text-gray-200 text-3xl font-rouge hover:text-white" href="/leaderboard">Leaderboard</a>
+          <a className="text-gray-200 text-3xl font-licorice hover:text-white" href="/leaderboard">Leaderboard</a>
         </div>
         <div className="text-xs flex items-center gap-4">
           <div className="flex items-center gap-1">
