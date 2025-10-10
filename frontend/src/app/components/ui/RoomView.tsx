@@ -71,14 +71,14 @@ export default function RoomView({ room, phase, banner, canPlay, replicatePatter
           <li key={p.id} className="flex justify-between">
             <span>{p.nickname || p.id.slice(0,4)}</span>
             <span className="flex gap-3 items-center">
-              <span className="text-gray-200">score: {p.score}%</span>
+              <span className="text-gray-200">Score: {p.score}%</span>
               {typeof p.attempts === 'number' && (
-                <span className="text-gray-200">attempts: {p.attempts}</span>
+                <span className="text-gray-200">Attempts: {p.attempts}</span>
               )}
               {typeof p.rejected === 'number' && p.rejected > 0 && (
-                <span className="text-gray-200">ignored: {p.rejected}</span>
+                <span className="text-gray-200">Ignored: {p.rejected}</span>
               )}
-              {room.ready?.includes(p.id) && <span className="text-green-500">ready</span>}
+              {room.ready?.includes(p.id) && <span className="text-green-500">Ready</span>}
             </span>
           </li>
         ))}

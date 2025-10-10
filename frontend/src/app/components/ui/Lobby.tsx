@@ -17,9 +17,9 @@ export default function Lobby({ rooms, onCreate, onJoin }: LobbyProps) {
   return (
     <div className="space-y-6">
       <div className="rounded-xl border bg-[#272725] p-4">
-        <div className="text-sm text-gray-200 mb-2">Create room</div>
+        <div className="text-sm text-gray-200 mb-2">Create Room</div>
         <div className="flex flex-col sm:flex-row gap-2">
-          <input id={nameId} placeholder="Room name" className="flex-1 px-3 py-2 rounded-lg bg-[#272725] text-white outline-none focus:ring-2 focus:ring-neutral-300" />
+          <input id={nameId} placeholder="Room Name" className="flex-1 px-3 py-2 rounded-lg bg-[#272725] text-white outline-none focus:ring-2 focus:ring-neutral-300" />
           <div className="relative w-28">
             <select
               id={capId}
@@ -47,7 +47,7 @@ export default function Lobby({ rooms, onCreate, onJoin }: LobbyProps) {
       </div>
 
       <div className="rounded-xl border bg-[#272725]">
-        <div className="p-4 text-gray-200 font-medium">Available rooms</div>
+        <div className="p-4 text-gray-200 font-medium">Available Rooms</div>
         <ul className="p-2">
           {rooms.length === 0 && (
             <li className="p-3 text-sm text-gray-200">
