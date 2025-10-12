@@ -14,9 +14,9 @@ import { ensureAudioContext, playSequence, playBeep, getSoundPack, setSoundPack 
 const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:6996';
 
 // Shapes we expect from the server
-type Player = { id: string; score: number };
+type Player = { id: string; score: number; nickname?: string | null; avatar?: string | null };
 type GameState = {
-  players: Record<string, Player & { nickname: string | null }>;
+  players: Record<string, Player>;
   currentPattern: string[];
   currentPlayerTurn: string | null;
   currentRound: number;
@@ -30,6 +30,10 @@ export default function Home() {
   const [myId, setMyId] = useState<string | null>(null);
   const [nickname, setNickname] = useState<string>("");
   const [hasNick, setHasNick] = useState<boolean>(false);
+  // Start with null to keep initial render deterministic; populate from localStorage after mount
+  const [avatar, setAvatar] = useState<string | null>(null);
+  const AVATAR_LIST = ['avatar1.png','avatar2.png','avatar3.jpg','avatar4.jpg','avatar5.jpg','avatar6.jpg','avatar7.png','avatar8.png','avatar9.png','avatar10.png','avatar11.jpg','avatar12.png'];
+  const [avatarIndex, setAvatarIndex] = useState<number>(0);
 
   // Server state and room lobby
   const [gameState, setGameState] = useState<GameState | null>(null);
@@ -89,6 +93,8 @@ export default function Home() {
         try { localStorage.setItem(key, uid); } catch {}
       }
       setUserId(uid);
+      // restore avatar from localStorage if present (after mount)
+      try { const av = localStorage.getItem('dupme_avatar'); if (av) setAvatar(av); } catch {}
     });
 
     newSocket.on('gameStateUpdate', (newState: GameState) => {
@@ -157,11 +163,19 @@ export default function Home() {
       setWinnerOverlayOpen(false);
     });
 
+
     // Cleanup on unmount
     return () => {
       newSocket.disconnect();
     };
   }, []); 
+
+  // keep avatarIndex in sync when avatar changes (must be at top-level of component)
+  useEffect(() => {
+    if (!avatar) return;
+    const idx = AVATAR_LIST.findIndex((a) => avatar.endsWith(a));
+    setAvatarIndex(idx >= 0 ? idx : 0);
+  }, [avatar]);
 
   // Countdown timer + progress derived from server-provided endsAt/startAt
   useEffect(() => {
@@ -265,10 +279,11 @@ export default function Home() {
     if (!socket) return;
     const clean = nickname.trim();
     if (!clean) return;
-    socket.emit('CLIENT:SET_NICKNAME', { nickname: clean, userId });
+    socket.emit('CLIENT:SET_NICKNAME', { nickname: clean, userId, avatar });
+    try { if (avatar) localStorage.setItem('dupme_avatar', avatar); } catch {}
     setHasNick(true);
     await ensureAudio();
-  }, [socket, nickname, userId]);
+  }, [socket, nickname, userId, avatar]);
 
   // Lobby actions
   const createRoom = (name: string, capacity: number) => {
@@ -348,7 +363,7 @@ export default function Home() {
       <header className="px-6 py-4 flex items-center justify-between shrink-0 text-gray-50">
         <div className="flex items-center gap-4">
           <TrafficLights />
-          <OnlineUsers users={Object.values(gameState?.players || {}).map(p => ({ id: p.id, nickname: p.nickname, score: p.score }))} />
+          <OnlineUsers users={gameState ? Object.values(gameState.players).map(p => ({ id: p.id, nickname: p.nickname ?? null, score: p.score, avatar: p.avatar ?? null })) : []} />
           <a className="text-gray-200 text-3xl font-licorice hover:text-white" href="/leaderboard">Leaderboard</a>
         </div>
         <div className="text-xs flex items-center gap-4">
@@ -392,15 +407,40 @@ export default function Home() {
           <div className="w-full max-w-3xl mx-auto">
             <div className="p-5 sm:p-6 rounded-3xl bg-[#272725] backdrop-blur-xl shadow-[0_12px_40px_rgba(0,0,0,0.35)] text-gray-100 space-y-3">
               <p className="text-sm text-gray-200 mb-4">Enter your nickname to continue:</p>
-              <div className="flex gap-3">
+              <div className="flex flex-col sm:flex-row gap-3">
                 <input
                   value={nickname}
                   onChange={(e) => setNickname(e.target.value)}
                   className="flex-1 px-4 py-3 rounded-2xl bg-[#272725] text-white placeholder-white/60 border-white/10 outline-none"
                   placeholder="Nickname"
                 />
-                <button onClick={submitNickname} className="p-5 rounded-full bg-neutral-200 text-neutral-900 hover:bg-gray-400 transition"><Music size={18} /></button>
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    {/* Avatar preview / carousel toggle */}
+                    <div>
+                      <div className="text-xs text-gray-300 mb-1 text-center w-full">Pick an avatar</div>
+                      <div className="flex items-center gap-2">
+                          <button onClick={() => {
+                            const prev = (avatarIndex - 1 + AVATAR_LIST.length) % AVATAR_LIST.length;
+                            const nextPath = `/avatars/${AVATAR_LIST[prev]}`;
+                            setAvatarIndex(prev); setAvatar(nextPath); try { localStorage.setItem('dupme_avatar', nextPath); } catch {}
+                          }} className="p-2 rounded bg-white/10">&lt;</button>
+                          <div className="h-20 w-20 rounded-full overflow-hidden border border-white bg-neutral-200">
+                            <img src={`/avatars/${AVATAR_LIST[avatarIndex]}`} alt="avatar large" className="h-20 w-20 object-cover" />
+                          </div>
+                          <button onClick={() => {
+                            const nxt = (avatarIndex + 1) % AVATAR_LIST.length;
+                            const nextPath = `/avatars/${AVATAR_LIST[nxt]}`;
+                            setAvatarIndex(nxt); setAvatar(nextPath); try { localStorage.setItem('dupme_avatar', nextPath); } catch {}
+                          }} className="p-2 rounded bg-white/10">&gt;</button>
+                        </div>
+                    </div>
+                    {/* removed duplicate label */}
+                  </div>
+                  <button onClick={submitNickname} className="p-4 rounded-full bg-neutral-200 text-neutral-900 hover:bg-gray-400 transition"><Music size={18} /></button>
+                </div>
               </div>
+              {/* carousel picker is inline in the preview; no separate grid here */}
             </div>
           </div>
         )}
@@ -446,6 +486,7 @@ export default function Home() {
                 onLeave={leaveRoom}
                 onReady={async (ready) => { await ensureAudio(); socket?.emit('ROOMS:READY', ready); }}
                 onKeyClick={handlePianoKeyClick}
+                playersState={gameState?.players || {}}
               />
               {phase === 'game_over' && (lbAll.length > 0 || lbWeek.length > 0) && (
                 <div className="mt-6 p-5 rounded-2xl bg-[#272725] text-gray-100">

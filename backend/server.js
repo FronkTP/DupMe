@@ -134,6 +134,7 @@ io.on('connection', (socket) => {
   gameState.players[socket.id] = {
     id: socket.id,
     score: 0,
+    avatar: null,
     nickname: null,
     userId: null,
   };
@@ -147,13 +148,18 @@ io.on('connection', (socket) => {
   socket.on('CLIENT:SET_NICKNAME', (payload) => {
     const player = gameState.players[socket.id];
     if (!player) return;
-    const { nickname, userId } = (typeof payload === 'object' && payload) ? payload : { nickname: payload, userId: null };
+    const { nickname, userId, avatar } = (typeof payload === 'object' && payload) ? payload : { nickname: payload, userId: null, avatar: null };
     const clean = String(nickname || '').trim().slice(0, 20);
     player.nickname = clean || `Player-${socket.id.slice(0,4)}`;
-    // Attach stable userId to this socket for later persistence (if set)
+    // Accept optional avatar (string, data URL or identifier)
+    player.avatar = avatar || player.avatar || null;
+    // Attach stable userId and avatar to this socket for later persistence (if set)
     if (userId) {
       socket.data.userId = String(userId);
       player.userId = String(userId);
+    }
+    if (avatar) {
+      socket.data.avatar = String(avatar);
     }
     // Upsert user in Neon if enabled
     if (db && userId) {
