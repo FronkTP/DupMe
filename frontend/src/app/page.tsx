@@ -32,7 +32,7 @@ export default function Home() {
   const [hasNick, setHasNick] = useState<boolean>(false);
   // Start with null to keep initial render deterministic; populate from localStorage after mount
   const [avatar, setAvatar] = useState<string | null>(null);
-  const AVATAR_LIST = ['avatar1.png','avatar2.png','avatar3.jpg','avatar4.jpg','avatar5.jpg','avatar6.jpg','avatar7.png','avatar8.png','avatar9.png','avatar10.png','avatar11.jpg','avatar12.png'];
+  const AVATAR_LIST = ['avatar1.png','avatar2.png','avatar3.jpg','avatar4.jpg','avatar5.jpg','avatar6.jpg','avatar7.png','avatar8.png','avatar9.png','avatar10.png','avatar11.jpg','avatar12.png','avatar13.jpg','avatar14.jpg'];
   const [avatarIndex, setAvatarIndex] = useState<number>(0);
 
   // Server state and room lobby
