@@ -79,6 +79,12 @@ export default function Lobby({ rooms, onCreate, onJoin }: LobbyProps) {
           ))}
         </ul>
       </div>
+        <div className="rounded-xl border bg-[#272725]">
+        <div className="p-4 text-gray-200 font-medium">Pratice</div>
+        <div className="flex justify-center gap-2">
+        <button className="px-4 py-2 rounded-lg bg-neutral-200 text-neutral-900 hover:bg-gray-400 transition">Create</button>
+        </div>
+      </div>
     </div>
   );
 }
