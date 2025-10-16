@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useMemo, useCallback } from 'react';
+import type { ChangeEvent } from 'react';
 import { io, Socket } from 'socket.io-client';
 import OnlineUsers from './components/ui/OnlineUsers';
 import Lobby from './components/ui/Lobby';
@@ -9,6 +10,38 @@ import TrafficLights from './components/ui/TrafficLights';
 import WinnerCelebration from './components/ui/WinnerCelebration';
 import { Music } from 'lucide-react';
 import { ensureAudioContext, playSequence, playBeep, getSoundPack, setSoundPack } from './utils/audio';
+
+// Downscale and compress an image file to a small data URL suitable for realtime sockets
+async function toAvatarDataUrl(file: File, maxDim = 160): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('read_failed'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('img_load_failed'));
+      img.onload = () => {
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return reject(new Error('canvas_failed'));
+        ctx.drawImage(img, 0, 0, w, h);
+        let q = 0.85;
+        let out = canvas.toDataURL('image/jpeg', q);
+        // Keep under ~900KB to stay below default engine.io maxHttpBufferSize (1MB) comfortably
+        while (out.length > 900 * 1024 && q > 0.5) {
+          q -= 0.1;
+          out = canvas.toDataURL('image/jpeg', q);
+        }
+        resolve(out);
+      };
+      img.src = String(reader.result);
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 // Socket endpoint for the backend
 const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:6996';
@@ -62,6 +95,7 @@ export default function Home() {
   const [highlightColor, setHighlightColor] = useState<string | null>(null);
   const clickGlowTimeoutRef = useRef<number | null>(null);
   const replicateLocalIndexRef = useRef<number>(0);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [timerProgress, setTimerProgress] = useState<number>(0);
   type LeaderRow = { user_id: string; nickname: string; best: number };
   const [lbAll, setLbAll] = useState<LeaderRow[]>([]);
@@ -95,7 +129,14 @@ export default function Home() {
       }
       setUserId(uid);
       // restore avatar from localStorage if present (after mount)
-      try { const av = localStorage.getItem('dupme_avatar'); if (av) setAvatar(av); } catch {}
+      try {
+        const av = localStorage.getItem('dupme_avatar');
+        if (av) {
+          setAvatar(av);
+          // Inform server immediately so header/room lists reflect avatar on first paint
+          try { newSocket.emit('CLIENT:SET_NICKNAME', { userId: uid, avatar: av }); } catch {}
+        }
+      } catch {}
     });
 
     newSocket.on('gameStateUpdate', (newState: GameState) => {
@@ -226,6 +267,15 @@ export default function Home() {
     const id = setInterval(update, 250);
     return () => clearInterval(id);
   }, [phaseEndsAt, phase, phaseStartAt]);
+
+  // If avatar changes after nickname is set, immediately propagate to server so headers/room lists update
+  useEffect(() => {
+    if (!socket) return;
+    if (!hasNick) return;
+    if (!avatar) return;
+    const clean = nickname.trim();
+    socket.emit('CLIENT:SET_NICKNAME', { nickname: clean || nickname, userId, avatar });
+  }, [avatar, hasNick, socket, nickname, userId]);
 
   // Auto-play pattern during playback phase once per round
   useEffect(() => {
@@ -490,15 +540,47 @@ export default function Home() {
                             const prev = (avatarIndex - 1 + AVATAR_LIST.length) % AVATAR_LIST.length;
                             const nextPath = `/avatars/${AVATAR_LIST[prev]}`;
                             setAvatarIndex(prev); setAvatar(nextPath); try { localStorage.setItem('dupme_avatar', nextPath); } catch {}
+                            // Push to server so UI updates globally
+                            if (socket) { const clean = nickname.trim(); socket.emit('CLIENT:SET_NICKNAME', { nickname: clean || nickname, userId, avatar: nextPath }); }
                           }} className="p-2 rounded bg-white/10">&lt;</button>
-                          <div className="h-20 w-20 rounded-full overflow-hidden border border-white bg-neutral-200">
-                            <img src={`/avatars/${AVATAR_LIST[avatarIndex]}`} alt="avatar large" className="h-20 w-20 object-cover" />
+                          <div
+                            className="h-20 w-20 rounded-full overflow-hidden border border-white bg-neutral-200 cursor-pointer"
+                            title="Click to upload your own"
+                            onClick={() => fileInputRef.current?.click()}
+                          >
+                            <img src={avatar || `/avatars/${AVATAR_LIST[avatarIndex]}`} alt="avatar large" className="h-20 w-20 object-cover" />
                           </div>
                           <button onClick={() => {
                             const nxt = (avatarIndex + 1) % AVATAR_LIST.length;
                             const nextPath = `/avatars/${AVATAR_LIST[nxt]}`;
                             setAvatarIndex(nxt); setAvatar(nextPath); try { localStorage.setItem('dupme_avatar', nextPath); } catch {}
+                            // Push to server so UI updates globally
+                            if (socket) { const clean = nickname.trim(); socket.emit('CLIENT:SET_NICKNAME', { nickname: clean || nickname, userId, avatar: nextPath }); }
                           }} className="p-2 rounded bg-white/10">&gt;</button>
+                          <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={async (e: ChangeEvent<HTMLInputElement>) => {
+                              const file = e.target.files?.[0];
+                              if (!file) { return; }
+                              if (!file.type.startsWith('image/')) { e.target.value = ''; return; }
+                              try {
+                                const dataUrl = await toAvatarDataUrl(file, 160);
+                                setAvatar(dataUrl);
+                                try { localStorage.setItem('dupme_avatar', dataUrl); } catch {}
+                                if (socket) {
+                                  const clean = nickname.trim();
+                                  socket.emit('CLIENT:SET_NICKNAME', { nickname: clean || nickname, userId, avatar: dataUrl });
+                                }
+                              } catch {
+                                // ignore
+                              }
+                              // Allow re-selecting the same file later
+                              e.target.value = '';
+                            }}
+                          />
                         </div>
                     </div>
                     {/* removed duplicate label */}

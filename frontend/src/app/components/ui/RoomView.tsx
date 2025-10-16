@@ -71,13 +71,16 @@ export default function RoomView({ room, phase, banner, canPlay, replicatePatter
         {room.players.map((p) => {
           const playerState = playersState?.[p.id];
           const avatar = playerState?.avatar ?? undefined;
+          const avatarSrc = typeof avatar === 'string' && avatar
+            ? (avatar.startsWith('data:') || avatar.startsWith('http') || avatar.startsWith('/') ? avatar : `/avatars/${avatar}`)
+            : '';
           const displayName = playerState?.nickname ?? p.nickname ?? p.id.slice(0,4);
           return (
             <li key={p.id} className="flex justify-between">
               <span className="flex items-center gap-2">
                 {/* avatar */}
-                {avatar ? (
-                  <img src={avatar} alt={playerState?.nickname || ''} className="h-6 w-6 rounded-full object-cover" />
+                {avatarSrc ? (
+                  <img src={avatarSrc} alt={playerState?.nickname || ''} className="h-6 w-6 rounded-full object-cover" />
                 ) : (
                   <div className="h-6 w-6 rounded-full bg-neutral-200 grid place-items-center text-[10px] text-gray-800">{(displayName || p.id.slice(0,2)).slice(0,2).toUpperCase()}</div>
                 )}

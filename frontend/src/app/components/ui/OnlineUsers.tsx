@@ -14,8 +14,8 @@ export default function OnlineUsers({ users }: OnlineUsersProps) {
         {users.slice(0, 6).map((u) => (
           <div key={u.id} title={`${u.nickname || u.id.slice(0,4)} — ${u.score}%`} className="h-6 w-6 rounded-full overflow-hidden border border-white bg-neutral-200">
             {typeof u.avatar === 'string' && u.avatar ? (
-              // If avatar is a path under /avatars/ or data URL, show as image
-              <img src={u.avatar.startsWith('/') ? u.avatar : `/avatars/${u.avatar}`} alt={u.nickname || ''} className="h-6 w-6 object-cover block" />
+              // Use data URLs, http(s), or absolute paths directly; otherwise resolve to /avatars/
+              <img src={u.avatar.startsWith('data:') || u.avatar.startsWith('http') || u.avatar.startsWith('/') ? u.avatar : `/avatars/${u.avatar}`} alt={u.nickname || ''} className="h-6 w-6 object-cover block" />
             ) : (
               <div className="h-6 w-6 grid place-items-center text-[10px] text-gray-800">
                 {(u.nickname || u.id.slice(0, 2)).slice(0, 2).toUpperCase()}
