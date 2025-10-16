@@ -22,7 +22,7 @@ type GameState = {
   currentRound: number;
 };
 type RoomListItem = { id: string; name: string; capacity: number; count: number };
-type RoomSnapshot = { id: string; name: string; capacity: number; players: Array<{ id: string; nickname: string | null; score: number; attempts?: number; rejected?: number }>; ready?: string[] };
+type RoomSnapshot = { id: string; name: string; capacity: number; players: Array<{ id: string; nickname: string | null; score: number; attempts?: number; rejected?: number }>; ready?: string[]; mode?: 'classic'|'perfect'|'reverse' };
 
 export default function Home() {
   // Connection + identity
@@ -46,6 +46,7 @@ export default function Home() {
   const [phase, setPhase] = useState<'idle'|'demo'|'create'|'playback'|'replicate'|'ended'|'game_over'|null>(null);
   const [creatorId, setCreatorId] = useState<string | null>(null);
   const [replicatePattern, setReplicatePattern] = useState<string[]>([]);
+  const [roomMode, setRoomMode] = useState<'classic'|'perfect'|'reverse'>('classic');
   const [results, setResults] = useState<Array<{ id: string; nickname: string | null; score: number }> | null>(null);
   const [winnerOverlayOpen, setWinnerOverlayOpen] = useState<boolean>(false);
   const [phaseEndsAt, setPhaseEndsAt] = useState<number | null>(null);
@@ -105,9 +106,20 @@ export default function Home() {
     newSocket.on('SERVER:ROOMS', (list: RoomListItem[]) => setRooms(list));
     newSocket.on('SERVER:ROOM', (snapshot: RoomSnapshot) => {
       setRoom(snapshot);
+      if (snapshot?.mode) setRoomMode(snapshot.mode as any);
     });
     newSocket.on('SERVER:JOINED_ROOM', () => setRoomBanner(""));
-    newSocket.on('SERVER:LEFT_ROOM', () => { setRoom(null); setRoomBanner(""); setAudioReady(false); setLastPlaybackEndsAt(null); });
+    newSocket.on('SERVER:LEFT_ROOM', () => {
+      // Clear room-local UI state so stale phase/creator info doesn't linger
+      setRoom(null);
+      setRoomBanner("");
+      setAudioReady(false);
+      setLastPlaybackEndsAt(null);
+      setPhase(null);
+      setCreatorId(null);
+      setReplicatePattern([]);
+      setResults(null);
+    });
     type GameStartPayload = { roomId: string; creatorId?: string; phase?: 'create'; endsAt?: number; roundIndex?: number; totalRounds?: number };
     type PhasePayload = { roomId: string; phase?: 'demo'|'create'|'playback'|'replicate'|'ended'|'game_over'; creatorId?: string; endsAt?: number; pattern?: string[]; sequence?: string[]; noteMs?: number; gapMs?: number; results?: Array<{ id: string; nickname: string | null; score: number }>} ;
     newSocket.on('SERVER:GAME_START', (p: GameStartPayload) => {
@@ -119,23 +131,35 @@ export default function Home() {
       setPhaseEndsAt(typeof p?.endsAt === 'number' ? p.endsAt : null);
       setPhaseStartAt(Date.now());
       setWinnerOverlayOpen(false);
+      if ((p as any)?.mode) setRoomMode((p as any).mode);
     });
     newSocket.on('SERVER:PHASE', (p: PhasePayload) => {
       setPhase(p?.phase ?? null);
       setCreatorId(p?.creatorId ?? null);
+      if ((p as any)?.mode) setRoomMode((p as any).mode || 'classic');
       if (p?.phase === 'demo') {
         setRoomBanner('Sound demo: listen to each note');
         setDemoSequence(p?.sequence || ['C','D','E','F','G','A','B']);
         if (typeof p?.noteMs === 'number') setDemoNoteMs(p.noteMs);
         if (typeof p?.gapMs === 'number') setDemoGapMs(p.gapMs);
+        // during demo we don't set replicatePattern; visuals will use demoSequence
         setReplicatePattern([]);
         setResults(null);
       }
-      if (p?.phase === 'playback') setRoomBanner('Listening: melody is playing');
+      if (p?.phase === 'playback') {
+        setRoomBanner('Listening: melody is playing');
+        if (typeof p?.noteMs === 'number') setDemoNoteMs(p.noteMs);
+        if (typeof p?.gapMs === 'number') setDemoGapMs(p.gapMs);
+      }
       if (p?.phase === 'replicate') setRoomBanner('Replicate phase: match the pattern');
       if (p?.phase === 'ended') setRoomBanner('Round ended');
+      // For playback: keep the sequence as-is so playback plays forward visuals/sounds
       if (p?.phase === 'playback') setReplicatePattern(p?.pattern || []);
-      if (p?.phase === 'replicate') setReplicatePattern(p?.pattern || []);
+      // For replicate: if mode is reverse, set the expected sequence to the reversed pattern
+      if (p?.phase === 'replicate') {
+        if ((p as any)?.mode === 'reverse') setReplicatePattern((p?.pattern || []).slice().reverse());
+        else setReplicatePattern(p?.pattern || []);
+      }
       if (p?.phase === 'ended') { setReplicatePattern([]); if (p?.results) setResults(p.results); }
       setPhaseEndsAt(typeof p?.endsAt === 'number' ? p.endsAt : null);
       setPhaseStartAt(typeof p?.endsAt === 'number' ? Date.now() : null);
@@ -224,8 +248,9 @@ export default function Home() {
     if (lastDemoEndsAtRef.current === phaseEndsAt) return;
     lastDemoEndsAtRef.current = phaseEndsAt;
     const seq = demoSequence && demoSequence.length ? demoSequence : ['C','D','E','F','G','A','B'];
+    // Play audio demo for all modes; demo should always show visual highlights
     playSequence(seq, { noteMs: demoNoteMs, gapMs: demoGapMs });
-    // schedule highlighting using timeouts to ensure exact sequence
+    // schedule highlighting using timeouts to ensure exact sequence (always visible during demo)
     const timeouts: number[] = [];
     for (let i = 0; i < seq.length; i++) {
       const id = window.setTimeout(() => { setHighlightIndex(i); setHighlightColor(null); }, i * (demoNoteMs + demoGapMs));
@@ -235,6 +260,25 @@ export default function Home() {
     timeouts.push(clearId);
     return () => { timeouts.forEach((id) => window.clearTimeout(id)); };
   }, [phase, audioReady, phaseEndsAt, demoSequence, demoNoteMs, demoGapMs]);
+
+  // Visual highlighting during playback (for classic & reverse modes)
+  useEffect(() => {
+    if (phase !== 'playback') { setHighlightIndex(-1); return; }
+    if (!audioReady) return;
+    if (!phaseEndsAt) return;
+    if (roomMode === 'perfect') return; // audio only
+    const notes = (replicatePattern && replicatePattern.length) ? replicatePattern : [];
+    if (notes.length === 0) return;
+    // schedule highlighting using timeouts
+    const timeouts: number[] = [];
+    for (let i = 0; i < notes.length; i++) {
+      const id = window.setTimeout(() => { const idx = ['C','D','E','F','G','A','B'].indexOf(notes[i] || ''); setHighlightIndex(idx); setHighlightColor(null); }, i * (demoNoteMs + demoGapMs));
+      timeouts.push(id);
+    }
+    const clearId = window.setTimeout(() => { setHighlightIndex(-1); setHighlightColor(null); }, notes.length * (demoNoteMs + demoGapMs));
+    timeouts.push(clearId);
+    return () => { timeouts.forEach((id) => window.clearTimeout(id)); };
+  }, [phase, audioReady, phaseEndsAt, replicatePattern, demoNoteMs, demoGapMs, roomMode]);
 
   // Derived flags for UI enablement
   const isCreator = creatorId ? myId === creatorId : false;
@@ -286,14 +330,34 @@ export default function Home() {
   }, [socket, nickname, userId, avatar]);
 
   // Lobby actions
-  const createRoom = (name: string, capacity: number) => {
+  const createRoom = (name: string, capacity: number, mode: 'classic'|'perfect'|'reverse' = 'classic') => {
     if (!socket) return;
-    socket.emit('ROOMS:CREATE', { name, capacity });
+    // Ensure we left any previous room on the server to avoid race/linger issues
+    const ensureLeft = () => new Promise<void>((resolve) => {
+      if (!socket) return resolve();
+      let done = false;
+      const onLeft = () => { if (done) return; done = true; socket.off('SERVER:LEFT_ROOM', onLeft); resolve(); };
+      socket.once('SERVER:LEFT_ROOM', onLeft);
+      // fallback in case server doesn't respond promptly
+      setTimeout(() => onLeft(), 400);
+      // trigger leave if we think we're in a room
+      socket.emit('ROOMS:LEAVE');
+    });
+    void ensureLeft().then(() => socket.emit('ROOMS:CREATE', { name, capacity, mode }));
   };
 
   const joinRoom = (id: string) : void => {
     if (!socket) return;
-    socket.emit('ROOMS:JOIN', id);
+    // Ensure we left any previous room on the server first
+    const ensureLeft = () => new Promise<void>((resolve) => {
+      if (!socket) return resolve();
+      let done = false;
+      const onLeft = () => { if (done) return; done = true; socket.off('SERVER:LEFT_ROOM', onLeft); resolve(); };
+      socket.once('SERVER:LEFT_ROOM', onLeft);
+      setTimeout(() => onLeft(), 400);
+      socket.emit('ROOMS:LEAVE');
+    });
+    void ensureLeft().then(() => socket.emit('ROOMS:JOIN', id));
   };
 
   const leaveRoom = () : void => {

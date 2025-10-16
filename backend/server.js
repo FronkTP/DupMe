@@ -196,7 +196,8 @@ io.on('connection', (socket) => {
         const baseAtt = (room.game.roundBaseAttempts?.[socket.id] || 0);
         let matches = 0;
         for (let i = 0; i < arr.length; i++) {
-          if (room.game.pattern[i] === arr[i]) matches++;
+          const expected = room.game.mode === 'reverse' ? room.game.pattern[room.game.pattern.length - 1 - i] : room.game.pattern[i];
+          if (expected === arr[i]) matches++;
         }
         room.game.scores[socket.id] = base + matches;
         room.game.attempts[socket.id] = baseAtt + arr.length;
@@ -214,8 +215,9 @@ io.on('connection', (socket) => {
   });
 
   // Rooms: create / join / leave
-  socket.on('ROOMS:CREATE', ({ name, capacity } = {}) => {
-    const id = createRoom({ name, capacity });
+  socket.on('ROOMS:CREATE', (payload = {}) => {
+    const { name, capacity, mode } = (typeof payload === 'object' && payload) ? payload : {};
+    const id = createRoom({ name, capacity, mode });
     broadcastRooms();
     joinRoom(socket, id);
   });

@@ -13,7 +13,9 @@ export const makeGameApi = ({ getPlayersState, broadcastRoom, broadcastGameState
     const order = (room.joinOrder || []).filter((id) => currentPlayers.includes(id));
     const scores = {}; const attempts = {};
     order.forEach((sid) => { scores[sid] = 0; attempts[sid] = 0; const p = getPlayersState()[sid]; if (p) p.score = 0; });
-    room.game = { phase: 'demo', order, roundIndex: 0, creatorId: order[0], pattern: [], submissions: {}, endsAt: Date.now(), scores, attempts, rejected: {}, roundBase: { ...scores }, roundBaseAttempts: { ...attempts } };
+    // inherit room mode (default to classic)
+    const mode = room.mode || 'classic';
+    room.game = { phase: 'demo', mode, order, roundIndex: 0, creatorId: order[0], pattern: [], submissions: {}, endsAt: Date.now(), scores, attempts, rejected: {}, roundBase: { ...scores }, roundBaseAttempts: { ...attempts } };
     // Broadcast zeroed scoreboard immediately so clients don't show stale scores
     broadcastGameState();
     broadcastRoom(roomId);
@@ -37,7 +39,7 @@ export const makeGameApi = ({ getPlayersState, broadcastRoom, broadcastGameState
       p.score = toPercent(room.game.roundBase[sid] || 0, room.game.roundBaseAttempts[sid] || 0);
     });
     broadcastGameState();
-    io.to(roomId).emit('SERVER:GAME_START', { roomId, creatorId: room.game.creatorId, phase: 'create', endsAt: room.game.endsAt, roundIndex: room.game.roundIndex, totalRounds: room.game.order.length });
+  io.to(roomId).emit('SERVER:GAME_START', { roomId, creatorId: room.game.creatorId, phase: 'create', endsAt: room.game.endsAt, roundIndex: room.game.roundIndex, totalRounds: room.game.order.length, mode: room.game.mode });
     clearTimeout(room.game.tCreate);
     room.game.tCreate = setTimeout(() => startPlaybackPhase(roomId), 10000);
   };
@@ -55,7 +57,7 @@ export const makeGameApi = ({ getPlayersState, broadcastRoom, broadcastGameState
     const totalMs = leadMs + (sequence.length * (noteMs + gapMs) - gapMs) + tailMs;
     const playbackDurationMs = Math.min(totalMs, 8000);
     room.game.endsAt = Date.now() + playbackDurationMs;
-    io.to(roomId).emit('SERVER:PHASE', { roomId, phase: 'demo', creatorId: room.game.creatorId, endsAt: room.game.endsAt, sequence, noteMs, gapMs });
+  io.to(roomId).emit('SERVER:PHASE', { roomId, phase: 'demo', creatorId: room.game.creatorId, endsAt: room.game.endsAt, sequence, noteMs, gapMs, mode: room.game.mode });
     clearTimeout(room.game.tDemo);
     room.game.tDemo = setTimeout(() => startCreatePhase(roomId), playbackDurationMs);
   };
@@ -74,7 +76,7 @@ export const makeGameApi = ({ getPlayersState, broadcastRoom, broadcastGameState
     const base = patternLen > 0 ? (leadMs + patternLen * (noteMs + gapMs) - gapMs + tailMs) : 700;
     const playbackDurationMs = Math.min(base, 8000); // cap to keep rounds snappy
     room.game.endsAt = Date.now() + playbackDurationMs;
-    io.to(roomId).emit('SERVER:PHASE', { roomId, phase: 'playback', creatorId: room.game.creatorId, endsAt: room.game.endsAt, pattern: room.game.pattern, noteMs, gapMs });
+  io.to(roomId).emit('SERVER:PHASE', { roomId, phase: 'playback', creatorId: room.game.creatorId, endsAt: room.game.endsAt, pattern: room.game.pattern, noteMs, gapMs, mode: room.game.mode });
     clearTimeout(room.game.tPlayback);
     room.game.tPlayback = setTimeout(() => startReplicatePhase(roomId), playbackDurationMs);
   };
@@ -85,7 +87,7 @@ export const makeGameApi = ({ getPlayersState, broadcastRoom, broadcastGameState
     room.game.phase = 'replicate';
     room.game.submissions = {};
     room.game.endsAt = Date.now() + 15000;
-    io.to(roomId).emit('SERVER:PHASE', { roomId, phase: 'replicate', creatorId: room.game.creatorId, endsAt: room.game.endsAt, pattern: room.game.pattern });
+  io.to(roomId).emit('SERVER:PHASE', { roomId, phase: 'replicate', creatorId: room.game.creatorId, endsAt: room.game.endsAt, pattern: room.game.pattern, mode: room.game.mode });
     clearTimeout(room.game.tReplicate);
     room.game.tReplicate = setTimeout(() => finishRound(roomId), 15000);
   };
@@ -100,7 +102,8 @@ export const makeGameApi = ({ getPlayersState, broadcastRoom, broadcastGameState
       const sub = (room.game.submissions[sid] || []);
       let matches = 0;
       for (let i = 0; i < Math.min(pattern.length, sub.length); i++) {
-        if (pattern[i] === sub[i]) matches++;
+        const expected = room.game.mode === 'reverse' ? pattern[pattern.length - 1 - i] : pattern[i];
+        if (expected === sub[i]) matches++;
       }
       const base = (room.game.roundBase?.[sid] || 0);
       const baseAtt = (room.game.roundBaseAttempts?.[sid] || 0);

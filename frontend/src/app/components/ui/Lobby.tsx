@@ -6,19 +6,20 @@ type RoomListItem = { id: string; name: string; capacity: number; count: number 
 
 type LobbyProps = {
   rooms: RoomListItem[];
-  onCreate: (name: string, capacity: number) => void;
+  onCreate: (name: string, capacity: number, mode: 'classic'|'perfect'|'reverse') => void;
   onJoin: (id: string) => void;
 };
 
 export default function Lobby({ rooms, onCreate, onJoin }: LobbyProps) {
   const nameId = useId();
   const capId = useId();
+  const modeId = useId();
 
   return (
     <div className="space-y-6">
       <div className="rounded-xl border bg-[#272725] p-4">
         <div className="text-sm text-gray-200 mb-2">Create Room</div>
-        <div className="flex flex-col sm:flex-row gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
           <input id={nameId} placeholder="Room Name" className="flex-1 px-3 py-2 rounded-lg bg-[#272725] text-white outline-none focus:ring-2 focus:ring-neutral-300" />
           <div className="relative w-28">
             <select
@@ -33,14 +34,24 @@ export default function Lobby({ rooms, onCreate, onJoin }: LobbyProps) {
             </select>
             <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-gray-300">▾</span>
           </div>
+          <div className="relative w-36">
+            <select id={modeId} defaultValue="classic" className="w-full px-3 py-2 pr-8 rounded-lg bg-[#272725] text-white outline-none focus:ring-2 focus:ring-neutral-300 border border-white/10 appearance-none">
+              <option value="classic">Classic (visual + audio)</option>
+              <option value="perfect">Perfect pitch (audio only)</option>
+              <option value="reverse">Reverse (playback reversed)</option>
+            </select>
+            <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-gray-300">▾</span>
+          </div>
           <button
             className="px-4 py-2 rounded-lg bg-neutral-200 text-neutral-900 hover:bg-gray-400 transition"
             onClick={() => {
               const nameEl = document.getElementById(nameId) as HTMLInputElement | null;
               const capEl = document.getElementById(capId) as HTMLSelectElement | null;
+              const modeEl = document.getElementById(modeId) as HTMLSelectElement | null;
               const name = nameEl?.value || "";
               const cap = Number(capEl?.value || 2);
-              onCreate(name, cap);
+              const mode = (modeEl?.value as 'classic'|'perfect'|'reverse') || 'classic';
+              onCreate(name, cap, mode);
             }}
           >Create</button>
         </div>

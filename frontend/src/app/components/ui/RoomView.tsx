@@ -5,7 +5,7 @@ import Piano from "../Piano";
 
 type Player = { id: string; nickname: string | null; score: number; attempts?: number; rejected?: number };
 
-type RoomSnapshot = { id: string; name: string; capacity: number; players: Player[]; ready?: string[] };
+type RoomSnapshot = { id: string; name: string; capacity: number; players: Player[]; ready?: string[]; mode?: 'classic'|'perfect'|'reverse' };
 
 type RoomViewProps = {
   room: RoomSnapshot;
@@ -113,7 +113,7 @@ export default function RoomView({ room, phase, banner, canPlay, replicatePatter
 
       {phase === 'playback' && (
 		<div className="mt-2">
-		  <Piano onKeyClick={onKeyClick} disabled={true} highlightIndex={-1} highlightColor={null} />
+      <Piano onKeyClick={onKeyClick} disabled={true} highlightIndex={highlightIndex} highlightColor={highlightColor} />
 		</div>
 	  )}
 

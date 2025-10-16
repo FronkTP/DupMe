@@ -11,13 +11,15 @@ export const listRooms = () => Object.values(rooms).map((r) => ({
   name: r.name,
   capacity: r.capacity,
   count: Object.keys(r.players).length,
+  mode: r.mode || 'classic',
 }));
 
 // Create a new room and return its id
-export const createRoom = ({ name, capacity }) => {
+export const createRoom = ({ name, capacity, mode } = {}) => {
   const id = generateRoomId();
   const cap = Math.max(2, Math.min(12, Number(capacity) || 2));
-  rooms[id] = { id, name: String(name || `Room ${id}`), capacity: cap, players: {}, ready: {}, joinOrder: [] };
+  const m = (mode === 'perfect' || mode === 'reverse') ? mode : 'classic';
+  rooms[id] = { id, name: String(name || `Room ${id}`), capacity: cap, players: {}, ready: {}, joinOrder: [], mode: m };
   return id;
 };
 
@@ -34,7 +36,8 @@ export const getRoomSnapshot = (roomId, playersState) => {
       : { id: sid, nickname: null, score: 0, attempts: attemptsMap[sid] || 0, rejected: rejectedMap[sid] || 0 };
   });
   const ready = Object.keys(room.ready || {}).filter((sid) => room.ready[sid]);
-  return { id: room.id, name: room.name, capacity: room.capacity, players, ready };
+  return { id: room.id, name: room.name, capacity: room.capacity, players, ready, mode: room.mode || 'classic' };
 };
+
 
 
