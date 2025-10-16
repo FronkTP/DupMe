@@ -8,7 +8,7 @@ import Lobby from './components/ui/Lobby';
 import RoomView from './components/ui/RoomView';
 import TrafficLights from './components/ui/TrafficLights';
 import WinnerCelebration from './components/ui/WinnerCelebration';
-import { Music } from 'lucide-react';
+import { Music, Pencil, Camera as CameraIcon, ImageUp } from 'lucide-react';
 import { ensureAudioContext, playSequence, playBeep, getSoundPack, setSoundPack } from './utils/audio';
 
 // Downscale and compress an image file to a small data URL suitable for realtime sockets
@@ -102,6 +102,10 @@ export default function Home() {
   const [lbWeek, setLbWeek] = useState<LeaderRow[]>([]);
   const [lbTab, setLbTab] = useState<'all'|'week'>('all');
   const [soundPack, setSoundPackState] = useState<string>(() => getSoundPack());
+  const [showAvatarMenu, setShowAvatarMenu] = useState<boolean>(false);
+  const [cameraOpen, setCameraOpen] = useState<boolean>(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
 
 
   useEffect(() => {
@@ -234,6 +238,39 @@ export default function Home() {
       newSocket.disconnect();
     };
   }, []); 
+
+  // Camera helpers
+  const startCamera = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+      mediaStreamRef.current = stream;
+      setCameraOpen(true);
+      setShowAvatarMenu(false);
+      requestAnimationFrame(() => { if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play().catch(()=>{}); } });
+    } catch {}
+  }, []);
+
+  const stopCamera = useCallback(() => {
+    const s = mediaStreamRef.current; mediaStreamRef.current = null;
+    if (s) { s.getTracks().forEach(t => { try { t.stop(); } catch {} }); }
+    setCameraOpen(false);
+  }, []);
+
+  const takePhoto = useCallback(async () => {
+    const video = videoRef.current; if (!video) return;
+    const vw = video.videoWidth || 640; const vh = video.videoHeight || 480;
+    const maxDim = 160; const scale = Math.min(1, maxDim / Math.max(vw, vh));
+    const w = Math.max(1, Math.round(vw * scale)); const h = Math.max(1, Math.round(vh * scale));
+    const canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d'); if (!ctx) return;
+    ctx.drawImage(video, 0, 0, w, h);
+    let q = 0.85; let dataUrl = canvas.toDataURL('image/jpeg', q);
+    while (dataUrl.length > 900 * 1024 && q > 0.5) { q -= 0.1; dataUrl = canvas.toDataURL('image/jpeg', q); }
+    setAvatar(dataUrl);
+    try { localStorage.setItem('dupme_avatar', dataUrl); } catch {}
+    if (socket) { const clean = nickname.trim(); socket.emit('CLIENT:SET_NICKNAME', { nickname: clean || nickname, userId, avatar: dataUrl }); }
+    stopCamera();
+  }, [nickname, socket, stopCamera, userId]);
 
   // keep avatarIndex in sync when avatar changes (must be at top-level of component)
   useEffect(() => {
@@ -543,12 +580,28 @@ export default function Home() {
                             // Push to server so UI updates globally
                             if (socket) { const clean = nickname.trim(); socket.emit('CLIENT:SET_NICKNAME', { nickname: clean || nickname, userId, avatar: nextPath }); }
                           }} className="p-2 rounded bg-white/10">&lt;</button>
-                          <div
-                            className="h-20 w-20 rounded-full overflow-hidden border border-white bg-neutral-200 cursor-pointer"
-                            title="Click to upload your own"
-                            onClick={() => fileInputRef.current?.click()}
-                          >
-                            <img src={avatar || `/avatars/${AVATAR_LIST[avatarIndex]}`} alt="avatar large" className="h-20 w-20 object-cover" />
+                          <div className="relative">
+                            <div
+                              className="h-20 w-20 rounded-full overflow-hidden border border-white bg-neutral-200 cursor-pointer"
+                              title="Click to change avatar"
+                              onClick={() => setShowAvatarMenu(v => !v)}
+                            >
+                              <img src={avatar || `/avatars/${AVATAR_LIST[avatarIndex]}`} alt="avatar large" className="h-20 w-20 object-cover" />
+                              <span className="absolute -right-1 -bottom-1 p-1 rounded-full bg-black/60 border border-white/40 text-white">
+                                <Pencil size={12} />
+                              </span>
+                            </div>
+                            {showAvatarMenu && (
+                              <div className="absolute flex flex-col top-full mt-2 left-1/2 -translate-x-1/2 z-10 rounded-lg border border-white/10 bg-[#2d2d2b] text-xs text-gray-100 shadow-lg">
+                                <button className="px-3 py-2 flex items-center gap-3 justify-center hover:bg-white/10 w-full text-left" onClick={() => { setShowAvatarMenu(false); fileInputRef.current?.click(); }}>
+                                  <ImageUp size={30} /> <span className='text-xs'>Upload Image</span>
+                                </button>
+                                <button className="px-3 py-2 flex items-center gap-3 justify-center hover:bg-white/10 w-full text-left" onClick={() => { void startCamera(); }}>
+                                  <CameraIcon size={30} />
+                                  <span className='text-xs'>Use Camera</span>
+                                </button>
+                              </div>
+                            )}
                           </div>
                           <button onClick={() => {
                             const nxt = (avatarIndex + 1) % AVATAR_LIST.length;
@@ -672,6 +725,21 @@ export default function Home() {
         winners={topWinners}
         onDismiss={() => setWinnerOverlayOpen(false)}
       />
+      {/* Camera modal */}
+      {cameraOpen && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/60">
+          <div className="bg-[#272725] border border-white/10 rounded-2xl p-4 text-gray-100 w-[90vw] max-w-sm">
+            <div className="text-sm mb-2">Take a photo</div>
+            <div className="rounded-xl overflow-hidden border border-white/10 bg-black/40">
+              <video ref={videoRef} className="w-full h-auto" playsInline muted />
+            </div>
+            <div className="mt-3 flex justify-end gap-2">
+              <button className="px-3 py-1.5 rounded bg-white/10" onClick={stopCamera}>Cancel</button>
+              <button className="px-3 py-1.5 rounded bg-neutral-200 text-neutral-900" onClick={takePhoto}>Use photo</button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
