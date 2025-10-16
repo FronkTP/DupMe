@@ -106,7 +106,7 @@ export default function Home() {
     newSocket.on('SERVER:ROOMS', (list: RoomListItem[]) => setRooms(list));
     newSocket.on('SERVER:ROOM', (snapshot: RoomSnapshot) => {
       setRoom(snapshot);
-      if (snapshot?.mode) setRoomMode(snapshot.mode as any);
+      if (snapshot?.mode) setRoomMode(snapshot.mode);
     });
     newSocket.on('SERVER:JOINED_ROOM', () => setRoomBanner(""));
     newSocket.on('SERVER:LEFT_ROOM', () => {
@@ -120,8 +120,8 @@ export default function Home() {
       setReplicatePattern([]);
       setResults(null);
     });
-    type GameStartPayload = { roomId: string; creatorId?: string; phase?: 'create'; endsAt?: number; roundIndex?: number; totalRounds?: number };
-    type PhasePayload = { roomId: string; phase?: 'demo'|'create'|'playback'|'replicate'|'ended'|'game_over'; creatorId?: string; endsAt?: number; pattern?: string[]; sequence?: string[]; noteMs?: number; gapMs?: number; results?: Array<{ id: string; nickname: string | null; score: number }>} ;
+    type GameStartPayload = { roomId: string; creatorId?: string; phase?: 'create'; endsAt?: number; roundIndex?: number; totalRounds?: number; mode?: 'classic'|'perfect'|'reverse' };
+    type PhasePayload = { roomId: string; phase?: 'demo'|'create'|'playback'|'replicate'|'ended'|'game_over'; creatorId?: string; endsAt?: number; pattern?: string[]; sequence?: string[]; noteMs?: number; gapMs?: number; results?: Array<{ id: string; nickname: string | null; score: number }>; mode?: 'classic'|'perfect'|'reverse' } ;
     newSocket.on('SERVER:GAME_START', (p: GameStartPayload) => {
       setRoomBanner(`Round ${((p?.roundIndex ?? 0) + 1)}/${p?.totalRounds ?? ''} • Create phase: start playing notes`);
       setPhase('create');
@@ -131,12 +131,12 @@ export default function Home() {
       setPhaseEndsAt(typeof p?.endsAt === 'number' ? p.endsAt : null);
       setPhaseStartAt(Date.now());
       setWinnerOverlayOpen(false);
-      if ((p as any)?.mode) setRoomMode((p as any).mode);
+      if (p?.mode) setRoomMode(p.mode);
     });
     newSocket.on('SERVER:PHASE', (p: PhasePayload) => {
       setPhase(p?.phase ?? null);
       setCreatorId(p?.creatorId ?? null);
-      if ((p as any)?.mode) setRoomMode((p as any).mode || 'classic');
+      if (p?.mode) setRoomMode(p.mode || 'classic');
       if (p?.phase === 'demo') {
         setRoomBanner('Sound demo: listen to each note');
         setDemoSequence(p?.sequence || ['C','D','E','F','G','A','B']);
@@ -157,7 +157,7 @@ export default function Home() {
       if (p?.phase === 'playback') setReplicatePattern(p?.pattern || []);
       // For replicate: if mode is reverse, set the expected sequence to the reversed pattern
       if (p?.phase === 'replicate') {
-        if ((p as any)?.mode === 'reverse') setReplicatePattern((p?.pattern || []).slice().reverse());
+        if (p?.mode === 'reverse') setReplicatePattern((p?.pattern || []).slice().reverse());
         else setReplicatePattern(p?.pattern || []);
       }
       if (p?.phase === 'ended') { setReplicatePattern([]); if (p?.results) setResults(p.results); }
@@ -199,7 +199,7 @@ export default function Home() {
     if (!avatar) return;
     const idx = AVATAR_LIST.findIndex((a) => avatar.endsWith(a));
     setAvatarIndex(idx >= 0 ? idx : 0);
-  }, [avatar]);
+  }, [avatar, AVATAR_LIST]);
 
   // Countdown timer + progress derived from server-provided endsAt/startAt
   useEffect(() => {
@@ -263,7 +263,7 @@ export default function Home() {
 
   // Visual highlighting during playback (for classic & reverse modes)
   useEffect(() => {
-    if (phase !== 'playback') { setHighlightIndex(-1); return; }
+    if (phase !== 'playback') { return; }
     if (!audioReady) return;
     if (!phaseEndsAt) return;
     if (roomMode === 'perfect') return; // audio only
@@ -305,14 +305,16 @@ export default function Home() {
         replicateLocalIndexRef.current = localIdx + 1;
       }
     } else {
+      // Standardize creator create-phase feedback to 400ms sound + glow
+      const glowMs = (isCreator && phase === 'create') ? 350 : 200;
       if (idx >= 0) {
         setHighlightIndex(idx);
         setHighlightColor(null);
         if (clickGlowTimeoutRef.current) window.clearTimeout(clickGlowTimeoutRef.current);
-        clickGlowTimeoutRef.current = window.setTimeout(() => { setHighlightIndex(-1); setHighlightColor(null); }, 200);
+        clickGlowTimeoutRef.current = window.setTimeout(() => { setHighlightIndex(-1); setHighlightColor(null); }, glowMs);
       }
       if (isCreator && phase === 'create' && audioReady) {
-        playSequence([note], { noteMs: 250, gapMs: 0 });
+        playSequence([note], { noteMs: 400, gapMs: 0 });
       }
     }
     socket.emit('CLIENT:SUBMIT_NOTE', note);
