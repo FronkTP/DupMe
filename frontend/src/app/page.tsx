@@ -10,6 +10,7 @@ import TrafficLights from './components/ui/TrafficLights';
 import WinnerCelebration from './components/ui/WinnerCelebration';
 import { Music, Pencil, Camera as CameraIcon, ImageUp } from 'lucide-react';
 import { ensureAudioContext, playSequence, playBeep, getSoundPack, setSoundPack } from './utils/audio';
+import VolumeControl from "./components/VolumeControl";
 
 // Downscale and compress an image file to a small data URL suitable for realtime sockets
 async function toAvatarDataUrl(file: File, maxDim = 160): Promise<string> {
@@ -106,6 +107,8 @@ export default function Home() {
   const [cameraOpen, setCameraOpen] = useState<boolean>(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
+  const [volume, setVolume] = useState(0.5);
+
 
 
   useEffect(() => {
@@ -388,7 +391,7 @@ export default function Home() {
           if (clickGlowTimeoutRef.current) window.clearTimeout(clickGlowTimeoutRef.current);
           clickGlowTimeoutRef.current = window.setTimeout(() => { setHighlightIndex(-1); setHighlightColor(null); }, 200);
         }
-        if (audioReady) playBeep(isCorrect ? 880 : 220, 200, 0.9);
+        if (audioReady) playBeep(isCorrect ? 880 : 220, 200, volume);
         replicateLocalIndexRef.current = localIdx + 1;
       }
     } else {
@@ -672,6 +675,7 @@ export default function Home() {
             </div>
           ) : (
             <div className="w-full max-w-2xl mx-auto">
+              <VolumeControl volume={volume} setVolume={setVolume} />
               <RoomView
                 room={room}
                 phase={phase}
