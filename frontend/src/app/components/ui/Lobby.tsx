@@ -7,7 +7,7 @@ type RoomListItem = { id: string; name: string; capacity: number; count: number 
 
 type LobbyProps = {
   rooms: RoomListItem[];
-  onCreate: (name: string, capacity: number) => void;
+  onCreate: (name: string, capacity: number, mode: 'classic'|'perfect'|'reverse') => void;
   onJoin: (id: string) => void;
 };
 
@@ -15,6 +15,7 @@ export default function Lobby({ rooms, onCreate, onJoin }: LobbyProps) {
   const [showConfig, setShowConfig] = useState(false);
   const nameId = useId();
   const capId = useId();
+  const modeId = useId();
 
   return (
     <div className="space-y-6">
@@ -34,9 +35,11 @@ export default function Lobby({ rooms, onCreate, onJoin }: LobbyProps) {
             onClick={() => {
               const nameEl = document.getElementById(nameId) as HTMLInputElement | null;
               const capEl = document.getElementById(capId) as HTMLSelectElement | null;
+              const modeEl = document.getElementById(modeId) as HTMLSelectElement | null;
               const name = nameEl?.value || "";
               const cap = Number(capEl?.value || 2);
-              onCreate(name, cap);
+              const mode = (modeEl?.value as 'classic'|'perfect'|'reverse') || 'classic';
+              onCreate(name, cap, mode);
             }}
           >Create</button>
         </div>

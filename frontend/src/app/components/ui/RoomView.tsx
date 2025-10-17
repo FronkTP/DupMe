@@ -5,7 +5,7 @@ import Piano from "../Piano";
 
 type Player = { id: string; nickname: string | null; score: number; attempts?: number; rejected?: number };
 
-type RoomSnapshot = { id: string; name: string; capacity: number; players: Player[]; ready?: string[] };
+type RoomSnapshot = { id: string; name: string; capacity: number; players: Player[]; ready?: string[]; mode?: 'classic'|'perfect'|'reverse' };
 
 type RoomViewProps = {
   room: RoomSnapshot;
@@ -22,9 +22,10 @@ type RoomViewProps = {
   onLeave: () => void;
   onReady: (ready: boolean) => void;
   onKeyClick: (note: string) => void;
+  playersState?: Record<string, { id: string; nickname?: string | null; score: number; avatar?: string | null }>;
 };
 
-export default function RoomView({ room, phase, banner, canPlay, replicatePattern, results, isCreator, highlightIndex, highlightColor, remainingSeconds, progress, onLeave, onReady, onKeyClick }: RoomViewProps) {
+export default function RoomView({ room, phase, banner, canPlay, replicatePattern, results, isCreator, highlightIndex, highlightColor, remainingSeconds, progress, onLeave, onReady, onKeyClick, playersState }: RoomViewProps) {
   const labelFor = (n: string) => {
     const u = (n || '').toUpperCase();
     const octave = '4';
@@ -67,21 +68,37 @@ export default function RoomView({ room, phase, banner, canPlay, replicatePatter
       )}
 
       <ul className="text-sm text-gray-200 space-y-1">
-        {room.players.map((p) => (
-          <li key={p.id} className="flex justify-between">
-            <span>{p.nickname || p.id.slice(0,4)}</span>
-            <span className="flex gap-3 items-center">
-              <span className="text-gray-200">Score: {p.score}%</span>
-              {typeof p.attempts === 'number' && (
-                <span className="text-gray-200">Attempts: {p.attempts}</span>
-              )}
-              {typeof p.rejected === 'number' && p.rejected > 0 && (
-                <span className="text-gray-200">Ignored: {p.rejected}</span>
-              )}
-              {room.ready?.includes(p.id) && <span className="text-green-500">Ready</span>}
-            </span>
-          </li>
-        ))}
+        {room.players.map((p) => {
+          const playerState = playersState?.[p.id];
+          const avatar = playerState?.avatar ?? undefined;
+          const avatarSrc = typeof avatar === 'string' && avatar
+            ? (avatar.startsWith('data:') || avatar.startsWith('http') || avatar.startsWith('/') ? avatar : `/avatars/${avatar}`)
+            : '';
+          const displayName = playerState?.nickname ?? p.nickname ?? p.id.slice(0,4);
+          return (
+            <li key={p.id} className="flex justify-between">
+              <span className="flex items-center gap-2">
+                {/* avatar */}
+                {avatarSrc ? (
+                  <img src={avatarSrc} alt={playerState?.nickname || ''} className="h-6 w-6 rounded-full object-cover" />
+                ) : (
+                  <div className="h-6 w-6 rounded-full bg-neutral-200 grid place-items-center text-[10px] text-gray-800">{(displayName || p.id.slice(0,2)).slice(0,2).toUpperCase()}</div>
+                )}
+                <span>{displayName}</span>
+              </span>
+              <span className="flex gap-3 items-center">
+                <span className="text-gray-200">Score: {p.score}%</span>
+                {typeof p.attempts === 'number' && (
+                  <span className="text-gray-200">Attempts: {p.attempts}</span>
+                )}
+                {typeof p.rejected === 'number' && p.rejected > 0 && (
+                  <span className="text-gray-200">Ignored: {p.rejected}</span>
+                )}
+                {room.ready?.includes(p.id) && <span className="text-green-500">Ready</span>}
+              </span>
+            </li>
+          );
+        })}
       </ul>
 
       {(phase === null || phase === 'idle' || phase === 'game_over') && (
@@ -99,7 +116,7 @@ export default function RoomView({ room, phase, banner, canPlay, replicatePatter
 
       {phase === 'playback' && (
 		<div className="mt-2">
-		  <Piano onKeyClick={onKeyClick} disabled={true} highlightIndex={-1} highlightColor={null} />
+      <Piano onKeyClick={onKeyClick} disabled={true} highlightIndex={highlightIndex} highlightColor={highlightColor} />
 		</div>
 	  )}
 

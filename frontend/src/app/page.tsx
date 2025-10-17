@@ -1,28 +1,61 @@
 "use client";
 
 import { useEffect, useState, useRef, useMemo, useCallback } from 'react';
+import type { ChangeEvent } from 'react';
 import { io, Socket } from 'socket.io-client';
 import OnlineUsers from './components/ui/OnlineUsers';
 import Lobby from './components/ui/Lobby';
 import RoomView from './components/ui/RoomView';
 import TrafficLights from './components/ui/TrafficLights';
 import WinnerCelebration from './components/ui/WinnerCelebration';
-import { Music } from 'lucide-react';
+import { Music, Pencil, Camera as CameraIcon, ImageUp } from 'lucide-react';
 import { ensureAudioContext, playSequence, playBeep, getSoundPack, setSoundPack } from './utils/audio';
+
+// Downscale and compress an image file to a small data URL suitable for realtime sockets
+async function toAvatarDataUrl(file: File, maxDim = 160): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('read_failed'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('img_load_failed'));
+      img.onload = () => {
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return reject(new Error('canvas_failed'));
+        ctx.drawImage(img, 0, 0, w, h);
+        let q = 0.85;
+        let out = canvas.toDataURL('image/jpeg', q);
+        // Keep under ~900KB to stay below default engine.io maxHttpBufferSize (1MB) comfortably
+        while (out.length > 900 * 1024 && q > 0.5) {
+          q -= 0.1;
+          out = canvas.toDataURL('image/jpeg', q);
+        }
+        resolve(out);
+      };
+      img.src = String(reader.result);
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 // Socket endpoint for the backend
 const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:6996';
 
 // Shapes we expect from the server
-type Player = { id: string; score: number };
+type Player = { id: string; score: number; nickname?: string | null; avatar?: string | null };
 type GameState = {
-  players: Record<string, Player & { nickname: string | null }>;
+  players: Record<string, Player>;
   currentPattern: string[];
   currentPlayerTurn: string | null;
   currentRound: number;
 };
 type RoomListItem = { id: string; name: string; capacity: number; count: number };
-type RoomSnapshot = { id: string; name: string; capacity: number; players: Array<{ id: string; nickname: string | null; score: number; attempts?: number; rejected?: number }>; ready?: string[] };
+type RoomSnapshot = { id: string; name: string; capacity: number; players: Array<{ id: string; nickname: string | null; score: number; attempts?: number; rejected?: number }>; ready?: string[]; mode?: 'classic'|'perfect'|'reverse' };
 
 export default function Home() {
   // Connection + identity
@@ -30,6 +63,10 @@ export default function Home() {
   const [myId, setMyId] = useState<string | null>(null);
   const [nickname, setNickname] = useState<string>("");
   const [hasNick, setHasNick] = useState<boolean>(false);
+  // Start with null to keep initial render deterministic; populate from localStorage after mount
+  const [avatar, setAvatar] = useState<string | null>(null);
+  const AVATAR_LIST = ['avatar1.png','avatar2.png','avatar3.jpg','avatar4.jpg','avatar5.jpg','avatar6.jpg','avatar7.png','avatar8.png','avatar9.png','avatar10.png','avatar11.jpg','avatar12.png','avatar13.jpg','avatar14.jpg'];
+  const [avatarIndex, setAvatarIndex] = useState<number>(0);
 
   // Server state and room lobby
   const [gameState, setGameState] = useState<GameState | null>(null);
@@ -42,6 +79,7 @@ export default function Home() {
   const [phase, setPhase] = useState<'idle'|'demo'|'create'|'playback'|'replicate'|'ended'|'game_over'|null>(null);
   const [creatorId, setCreatorId] = useState<string | null>(null);
   const [replicatePattern, setReplicatePattern] = useState<string[]>([]);
+  const [roomMode, setRoomMode] = useState<'classic'|'perfect'|'reverse'>('classic');
   const [results, setResults] = useState<Array<{ id: string; nickname: string | null; score: number }> | null>(null);
   const [winnerOverlayOpen, setWinnerOverlayOpen] = useState<boolean>(false);
   const [phaseEndsAt, setPhaseEndsAt] = useState<number | null>(null);
@@ -57,12 +95,17 @@ export default function Home() {
   const [highlightColor, setHighlightColor] = useState<string | null>(null);
   const clickGlowTimeoutRef = useRef<number | null>(null);
   const replicateLocalIndexRef = useRef<number>(0);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [timerProgress, setTimerProgress] = useState<number>(0);
   type LeaderRow = { user_id: string; nickname: string; best: number };
   const [lbAll, setLbAll] = useState<LeaderRow[]>([]);
   const [lbWeek, setLbWeek] = useState<LeaderRow[]>([]);
   const [lbTab, setLbTab] = useState<'all'|'week'>('all');
   const [soundPack, setSoundPackState] = useState<string>(() => getSoundPack());
+  const [showAvatarMenu, setShowAvatarMenu] = useState<boolean>(false);
+  const [cameraOpen, setCameraOpen] = useState<boolean>(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
 
 
   useEffect(() => {
@@ -89,6 +132,15 @@ export default function Home() {
         try { localStorage.setItem(key, uid); } catch {}
       }
       setUserId(uid);
+      // restore avatar from localStorage if present (after mount)
+      try {
+        const av = localStorage.getItem('dupme_avatar');
+        if (av) {
+          setAvatar(av);
+          // Inform server immediately so header/room lists reflect avatar on first paint
+          try { newSocket.emit('CLIENT:SET_NICKNAME', { userId: uid, avatar: av }); } catch {}
+        }
+      } catch {}
     });
 
     newSocket.on('gameStateUpdate', (newState: GameState) => {
@@ -99,11 +151,22 @@ export default function Home() {
     newSocket.on('SERVER:ROOMS', (list: RoomListItem[]) => setRooms(list));
     newSocket.on('SERVER:ROOM', (snapshot: RoomSnapshot) => {
       setRoom(snapshot);
+      if (snapshot?.mode) setRoomMode(snapshot.mode);
     });
     newSocket.on('SERVER:JOINED_ROOM', () => setRoomBanner(""));
-    newSocket.on('SERVER:LEFT_ROOM', () => { setRoom(null); setRoomBanner(""); setAudioReady(false); setLastPlaybackEndsAt(null); });
-    type GameStartPayload = { roomId: string; creatorId?: string; phase?: 'create'; endsAt?: number; roundIndex?: number; totalRounds?: number };
-    type PhasePayload = { roomId: string; phase?: 'demo'|'create'|'playback'|'replicate'|'ended'|'game_over'; creatorId?: string; endsAt?: number; pattern?: string[]; sequence?: string[]; noteMs?: number; gapMs?: number; results?: Array<{ id: string; nickname: string | null; score: number }>} ;
+    newSocket.on('SERVER:LEFT_ROOM', () => {
+      // Clear room-local UI state so stale phase/creator info doesn't linger
+      setRoom(null);
+      setRoomBanner("");
+      setAudioReady(false);
+      setLastPlaybackEndsAt(null);
+      setPhase(null);
+      setCreatorId(null);
+      setReplicatePattern([]);
+      setResults(null);
+    });
+    type GameStartPayload = { roomId: string; creatorId?: string; phase?: 'create'; endsAt?: number; roundIndex?: number; totalRounds?: number; mode?: 'classic'|'perfect'|'reverse' };
+    type PhasePayload = { roomId: string; phase?: 'demo'|'create'|'playback'|'replicate'|'ended'|'game_over'; creatorId?: string; endsAt?: number; pattern?: string[]; sequence?: string[]; noteMs?: number; gapMs?: number; results?: Array<{ id: string; nickname: string | null; score: number }>; mode?: 'classic'|'perfect'|'reverse' } ;
     newSocket.on('SERVER:GAME_START', (p: GameStartPayload) => {
       setRoomBanner(`Round ${((p?.roundIndex ?? 0) + 1)}/${p?.totalRounds ?? ''} • Create phase: start playing notes`);
       setPhase('create');
@@ -113,23 +176,35 @@ export default function Home() {
       setPhaseEndsAt(typeof p?.endsAt === 'number' ? p.endsAt : null);
       setPhaseStartAt(Date.now());
       setWinnerOverlayOpen(false);
+      if (p?.mode) setRoomMode(p.mode);
     });
     newSocket.on('SERVER:PHASE', (p: PhasePayload) => {
       setPhase(p?.phase ?? null);
       setCreatorId(p?.creatorId ?? null);
+      if (p?.mode) setRoomMode(p.mode || 'classic');
       if (p?.phase === 'demo') {
         setRoomBanner('Sound demo: listen to each note');
         setDemoSequence(p?.sequence || ['C','D','E','F','G','A','B']);
         if (typeof p?.noteMs === 'number') setDemoNoteMs(p.noteMs);
         if (typeof p?.gapMs === 'number') setDemoGapMs(p.gapMs);
+        // during demo we don't set replicatePattern; visuals will use demoSequence
         setReplicatePattern([]);
         setResults(null);
       }
-      if (p?.phase === 'playback') setRoomBanner('Listening: melody is playing');
+      if (p?.phase === 'playback') {
+        setRoomBanner('Listening: melody is playing');
+        if (typeof p?.noteMs === 'number') setDemoNoteMs(p.noteMs);
+        if (typeof p?.gapMs === 'number') setDemoGapMs(p.gapMs);
+      }
       if (p?.phase === 'replicate') setRoomBanner('Replicate phase: match the pattern');
       if (p?.phase === 'ended') setRoomBanner('Round ended');
+      // For playback: keep the sequence as-is so playback plays forward visuals/sounds
       if (p?.phase === 'playback') setReplicatePattern(p?.pattern || []);
-      if (p?.phase === 'replicate') setReplicatePattern(p?.pattern || []);
+      // For replicate: if mode is reverse, set the expected sequence to the reversed pattern
+      if (p?.phase === 'replicate') {
+        if (p?.mode === 'reverse') setReplicatePattern((p?.pattern || []).slice().reverse());
+        else setReplicatePattern(p?.pattern || []);
+      }
       if (p?.phase === 'ended') { setReplicatePattern([]); if (p?.results) setResults(p.results); }
       setPhaseEndsAt(typeof p?.endsAt === 'number' ? p.endsAt : null);
       setPhaseStartAt(typeof p?.endsAt === 'number' ? Date.now() : null);
@@ -157,11 +232,52 @@ export default function Home() {
       setWinnerOverlayOpen(false);
     });
 
+
     // Cleanup on unmount
     return () => {
       newSocket.disconnect();
     };
   }, []); 
+
+  // Camera helpers
+  const startCamera = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+      mediaStreamRef.current = stream;
+      setCameraOpen(true);
+      setShowAvatarMenu(false);
+      requestAnimationFrame(() => { if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play().catch(()=>{}); } });
+    } catch {}
+  }, []);
+
+  const stopCamera = useCallback(() => {
+    const s = mediaStreamRef.current; mediaStreamRef.current = null;
+    if (s) { s.getTracks().forEach(t => { try { t.stop(); } catch {} }); }
+    setCameraOpen(false);
+  }, []);
+
+  const takePhoto = useCallback(async () => {
+    const video = videoRef.current; if (!video) return;
+    const vw = video.videoWidth || 640; const vh = video.videoHeight || 480;
+    const maxDim = 160; const scale = Math.min(1, maxDim / Math.max(vw, vh));
+    const w = Math.max(1, Math.round(vw * scale)); const h = Math.max(1, Math.round(vh * scale));
+    const canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d'); if (!ctx) return;
+    ctx.drawImage(video, 0, 0, w, h);
+    let q = 0.85; let dataUrl = canvas.toDataURL('image/jpeg', q);
+    while (dataUrl.length > 900 * 1024 && q > 0.5) { q -= 0.1; dataUrl = canvas.toDataURL('image/jpeg', q); }
+    setAvatar(dataUrl);
+    try { localStorage.setItem('dupme_avatar', dataUrl); } catch {}
+    if (socket) { const clean = nickname.trim(); socket.emit('CLIENT:SET_NICKNAME', { nickname: clean || nickname, userId, avatar: dataUrl }); }
+    stopCamera();
+  }, [nickname, socket, stopCamera, userId]);
+
+  // keep avatarIndex in sync when avatar changes (must be at top-level of component)
+  useEffect(() => {
+    if (!avatar) return;
+    const idx = AVATAR_LIST.findIndex((a) => avatar.endsWith(a));
+    setAvatarIndex(idx >= 0 ? idx : 0);
+  }, [avatar, AVATAR_LIST]);
 
   // Countdown timer + progress derived from server-provided endsAt/startAt
   useEffect(() => {
@@ -189,6 +305,15 @@ export default function Home() {
     return () => clearInterval(id);
   }, [phaseEndsAt, phase, phaseStartAt]);
 
+  // If avatar changes after nickname is set, immediately propagate to server so headers/room lists update
+  useEffect(() => {
+    if (!socket) return;
+    if (!hasNick) return;
+    if (!avatar) return;
+    const clean = nickname.trim();
+    socket.emit('CLIENT:SET_NICKNAME', { nickname: clean || nickname, userId, avatar });
+  }, [avatar, hasNick, socket, nickname, userId]);
+
   // Auto-play pattern during playback phase once per round
   useEffect(() => {
     if (phase !== 'playback') return;
@@ -210,8 +335,9 @@ export default function Home() {
     if (lastDemoEndsAtRef.current === phaseEndsAt) return;
     lastDemoEndsAtRef.current = phaseEndsAt;
     const seq = demoSequence && demoSequence.length ? demoSequence : ['C','D','E','F','G','A','B'];
+    // Play audio demo for all modes; demo should always show visual highlights
     playSequence(seq, { noteMs: demoNoteMs, gapMs: demoGapMs });
-    // schedule highlighting using timeouts to ensure exact sequence
+    // schedule highlighting using timeouts to ensure exact sequence (always visible during demo)
     const timeouts: number[] = [];
     for (let i = 0; i < seq.length; i++) {
       const id = window.setTimeout(() => { setHighlightIndex(i); setHighlightColor(null); }, i * (demoNoteMs + demoGapMs));
@@ -221,6 +347,25 @@ export default function Home() {
     timeouts.push(clearId);
     return () => { timeouts.forEach((id) => window.clearTimeout(id)); };
   }, [phase, audioReady, phaseEndsAt, demoSequence, demoNoteMs, demoGapMs]);
+
+  // Visual highlighting during playback (for classic & reverse modes)
+  useEffect(() => {
+    if (phase !== 'playback') { return; }
+    if (!audioReady) return;
+    if (!phaseEndsAt) return;
+    if (roomMode === 'perfect') return; // audio only
+    const notes = (replicatePattern && replicatePattern.length) ? replicatePattern : [];
+    if (notes.length === 0) return;
+    // schedule highlighting using timeouts
+    const timeouts: number[] = [];
+    for (let i = 0; i < notes.length; i++) {
+      const id = window.setTimeout(() => { const idx = ['C','D','E','F','G','A','B'].indexOf(notes[i] || ''); setHighlightIndex(idx); setHighlightColor(null); }, i * (demoNoteMs + demoGapMs));
+      timeouts.push(id);
+    }
+    const clearId = window.setTimeout(() => { setHighlightIndex(-1); setHighlightColor(null); }, notes.length * (demoNoteMs + demoGapMs));
+    timeouts.push(clearId);
+    return () => { timeouts.forEach((id) => window.clearTimeout(id)); };
+  }, [phase, audioReady, phaseEndsAt, replicatePattern, demoNoteMs, demoGapMs, roomMode]);
 
   // Derived flags for UI enablement
   const isCreator = creatorId ? myId === creatorId : false;
@@ -247,14 +392,16 @@ export default function Home() {
         replicateLocalIndexRef.current = localIdx + 1;
       }
     } else {
+      // Standardize creator create-phase feedback to 400ms sound + glow
+      const glowMs = (isCreator && phase === 'create') ? 350 : 200;
       if (idx >= 0) {
         setHighlightIndex(idx);
         setHighlightColor(null);
         if (clickGlowTimeoutRef.current) window.clearTimeout(clickGlowTimeoutRef.current);
-        clickGlowTimeoutRef.current = window.setTimeout(() => { setHighlightIndex(-1); setHighlightColor(null); }, 200);
+        clickGlowTimeoutRef.current = window.setTimeout(() => { setHighlightIndex(-1); setHighlightColor(null); }, glowMs);
       }
       if (isCreator && phase === 'create' && audioReady) {
-        playSequence([note], { noteMs: 250, gapMs: 0 });
+        playSequence([note], { noteMs: 400, gapMs: 0 });
       }
     }
     socket.emit('CLIENT:SUBMIT_NOTE', note);
@@ -265,20 +412,41 @@ export default function Home() {
     if (!socket) return;
     const clean = nickname.trim();
     if (!clean) return;
-    socket.emit('CLIENT:SET_NICKNAME', { nickname: clean, userId });
+    socket.emit('CLIENT:SET_NICKNAME', { nickname: clean, userId, avatar });
+    try { if (avatar) localStorage.setItem('dupme_avatar', avatar); } catch {}
     setHasNick(true);
     await ensureAudio();
-  }, [socket, nickname, userId]);
+  }, [socket, nickname, userId, avatar]);
 
   // Lobby actions
-  const createRoom = (name: string, capacity: number) => {
+  const createRoom = (name: string, capacity: number, mode: 'classic'|'perfect'|'reverse' = 'classic') => {
     if (!socket) return;
-    socket.emit('ROOMS:CREATE', { name, capacity });
+    // Ensure we left any previous room on the server to avoid race/linger issues
+    const ensureLeft = () => new Promise<void>((resolve) => {
+      if (!socket) return resolve();
+      let done = false;
+      const onLeft = () => { if (done) return; done = true; socket.off('SERVER:LEFT_ROOM', onLeft); resolve(); };
+      socket.once('SERVER:LEFT_ROOM', onLeft);
+      // fallback in case server doesn't respond promptly
+      setTimeout(() => onLeft(), 400);
+      // trigger leave if we think we're in a room
+      socket.emit('ROOMS:LEAVE');
+    });
+    void ensureLeft().then(() => socket.emit('ROOMS:CREATE', { name, capacity, mode }));
   };
 
   const joinRoom = (id: string) : void => {
     if (!socket) return;
-    socket.emit('ROOMS:JOIN', id);
+    // Ensure we left any previous room on the server first
+    const ensureLeft = () => new Promise<void>((resolve) => {
+      if (!socket) return resolve();
+      let done = false;
+      const onLeft = () => { if (done) return; done = true; socket.off('SERVER:LEFT_ROOM', onLeft); resolve(); };
+      socket.once('SERVER:LEFT_ROOM', onLeft);
+      setTimeout(() => onLeft(), 400);
+      socket.emit('ROOMS:LEAVE');
+    });
+    void ensureLeft().then(() => socket.emit('ROOMS:JOIN', id));
   };
 
   const leaveRoom = () : void => {
@@ -348,7 +516,7 @@ export default function Home() {
       <header className="px-6 py-4 flex items-center justify-between shrink-0 text-gray-50">
         <div className="flex items-center gap-4">
           <TrafficLights />
-          <OnlineUsers users={Object.values(gameState?.players || {}).map(p => ({ id: p.id, nickname: p.nickname, score: p.score }))} />
+          <OnlineUsers users={gameState ? Object.values(gameState.players).map(p => ({ id: p.id, nickname: p.nickname ?? null, score: p.score, avatar: p.avatar ?? null })) : []} />
           <a className="text-gray-200 text-3xl font-licorice hover:text-white" href="/leaderboard">Leaderboard</a>
         </div>
         <div className="text-xs flex items-center gap-4">
@@ -392,15 +560,88 @@ export default function Home() {
           <div className="w-full max-w-3xl mx-auto">
             <div className="p-5 sm:p-6 rounded-3xl bg-[#272725] backdrop-blur-xl shadow-[0_12px_40px_rgba(0,0,0,0.35)] text-gray-100 space-y-3">
               <p className="text-sm text-gray-200 mb-4">Enter your nickname to continue:</p>
-              <div className="flex gap-3">
+              <div className="flex flex-col sm:flex-row gap-3">
                 <input
                   value={nickname}
                   onChange={(e) => setNickname(e.target.value)}
                   className="flex-1 px-4 py-3 rounded-2xl bg-[#272725] text-white placeholder-white/60 border-white/10 outline-none"
                   placeholder="Nickname"
                 />
-                <button onClick={submitNickname} className="p-5 rounded-full bg-neutral-200 text-neutral-900 hover:bg-gray-400 transition"><Music size={18} /></button>
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    {/* Avatar preview / carousel toggle */}
+                    <div>
+                      <div className="text-xs text-gray-300 mb-1 text-center w-full">Pick an avatar</div>
+                      <div className="flex items-center gap-2">
+                          <button onClick={() => {
+                            const prev = (avatarIndex - 1 + AVATAR_LIST.length) % AVATAR_LIST.length;
+                            const nextPath = `/avatars/${AVATAR_LIST[prev]}`;
+                            setAvatarIndex(prev); setAvatar(nextPath); try { localStorage.setItem('dupme_avatar', nextPath); } catch {}
+                            // Push to server so UI updates globally
+                            if (socket) { const clean = nickname.trim(); socket.emit('CLIENT:SET_NICKNAME', { nickname: clean || nickname, userId, avatar: nextPath }); }
+                          }} className="p-2 rounded bg-white/10">&lt;</button>
+                          <div className="relative">
+                            <div
+                              className="h-20 w-20 rounded-full overflow-hidden border border-white bg-neutral-200 cursor-pointer"
+                              title="Click to change avatar"
+                              onClick={() => setShowAvatarMenu(v => !v)}
+                            >
+                              <img src={avatar || `/avatars/${AVATAR_LIST[avatarIndex]}`} alt="avatar large" className="h-20 w-20 object-cover" />
+                              <span className="absolute -right-1 -bottom-1 p-1 rounded-full bg-black/60 border border-white/40 text-white">
+                                <Pencil size={12} />
+                              </span>
+                            </div>
+                            {showAvatarMenu && (
+                              <div className="absolute flex flex-col top-full mt-2 left-1/2 -translate-x-1/2 z-10 rounded-lg border border-white/10 bg-[#2d2d2b] text-xs text-gray-100 shadow-lg">
+                                <button className="px-3 py-2 flex items-center gap-3 justify-center hover:bg-white/10 w-full text-left" onClick={() => { setShowAvatarMenu(false); fileInputRef.current?.click(); }}>
+                                  <ImageUp size={30} /> <span className='text-xs'>Upload Image</span>
+                                </button>
+                                <button className="px-3 py-2 flex items-center gap-3 justify-center hover:bg-white/10 w-full text-left" onClick={() => { void startCamera(); }}>
+                                  <CameraIcon size={30} />
+                                  <span className='text-xs'>Use Camera</span>
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                          <button onClick={() => {
+                            const nxt = (avatarIndex + 1) % AVATAR_LIST.length;
+                            const nextPath = `/avatars/${AVATAR_LIST[nxt]}`;
+                            setAvatarIndex(nxt); setAvatar(nextPath); try { localStorage.setItem('dupme_avatar', nextPath); } catch {}
+                            // Push to server so UI updates globally
+                            if (socket) { const clean = nickname.trim(); socket.emit('CLIENT:SET_NICKNAME', { nickname: clean || nickname, userId, avatar: nextPath }); }
+                          }} className="p-2 rounded bg-white/10">&gt;</button>
+                          <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={async (e: ChangeEvent<HTMLInputElement>) => {
+                              const file = e.target.files?.[0];
+                              if (!file) { return; }
+                              if (!file.type.startsWith('image/')) { e.target.value = ''; return; }
+                              try {
+                                const dataUrl = await toAvatarDataUrl(file, 160);
+                                setAvatar(dataUrl);
+                                try { localStorage.setItem('dupme_avatar', dataUrl); } catch {}
+                                if (socket) {
+                                  const clean = nickname.trim();
+                                  socket.emit('CLIENT:SET_NICKNAME', { nickname: clean || nickname, userId, avatar: dataUrl });
+                                }
+                              } catch {
+                                // ignore
+                              }
+                              // Allow re-selecting the same file later
+                              e.target.value = '';
+                            }}
+                          />
+                        </div>
+                    </div>
+                    {/* removed duplicate label */}
+                  </div>
+                  <button onClick={submitNickname} className="p-4 rounded-full bg-neutral-200 text-neutral-900 hover:bg-gray-400 transition"><Music size={18} /></button>
+                </div>
               </div>
+              {/* carousel picker is inline in the preview; no separate grid here */}
             </div>
           </div>
         )}
@@ -446,6 +687,7 @@ export default function Home() {
                 onLeave={leaveRoom}
                 onReady={async (ready) => { await ensureAudio(); socket?.emit('ROOMS:READY', ready); }}
                 onKeyClick={handlePianoKeyClick}
+                playersState={gameState?.players || {}}
               />
               {phase === 'game_over' && (lbAll.length > 0 || lbWeek.length > 0) && (
                 <div className="mt-6 p-5 rounded-2xl bg-[#272725] text-gray-100">
@@ -483,6 +725,21 @@ export default function Home() {
         winners={topWinners}
         onDismiss={() => setWinnerOverlayOpen(false)}
       />
+      {/* Camera modal */}
+      {cameraOpen && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/60">
+          <div className="bg-[#272725] border border-white/10 rounded-2xl p-4 text-gray-100 w-[90vw] max-w-sm">
+            <div className="text-sm mb-2">Take a photo</div>
+            <div className="rounded-xl overflow-hidden border border-white/10 bg-black/40">
+              <video ref={videoRef} className="w-full h-auto" playsInline muted />
+            </div>
+            <div className="mt-3 flex justify-end gap-2">
+              <button className="px-3 py-1.5 rounded bg-white/10" onClick={stopCamera}>Cancel</button>
+              <button className="px-3 py-1.5 rounded bg-neutral-200 text-neutral-900" onClick={takePhoto}>Use photo</button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
