@@ -7,15 +7,16 @@ type RoomListItem = { id: string; name: string; capacity: number; count: number 
 
 type LobbyProps = {
   rooms: RoomListItem[];
-  onCreate: (name: string, capacity: number, mode: 'classic'|'perfect'|'reverse') => void;
+  onCreate: (name: string, capacity: number, mode: 'classic' | 'perfect' | 'reverse' | 'practice' | 'ai') => void;
   onJoin: (id: string) => void;
 };
 
 export default function Lobby({ rooms, onCreate, onJoin }: LobbyProps) {
   const [showConfig, setShowConfig] = useState(false);
+  const [selectedMode, setSelectedMode] = useState<'classic' | 'perfect' | 'reverse' | 'practice' | 'ai'>('classic');
   const nameId = useId();
   const capId = useId();
-  const modeId = useId();
+  // const modeId = useId();
 
   return (
     <div className="space-y-6">
@@ -35,11 +36,9 @@ export default function Lobby({ rooms, onCreate, onJoin }: LobbyProps) {
             onClick={() => {
               const nameEl = document.getElementById(nameId) as HTMLInputElement | null;
               const capEl = document.getElementById(capId) as HTMLSelectElement | null;
-              const modeEl = document.getElementById(modeId) as HTMLSelectElement | null;
               const name = nameEl?.value || "";
               const cap = Number(capEl?.value || 2);
-              const mode = (modeEl?.value as 'classic'|'perfect'|'reverse') || 'classic';
-              onCreate(name, cap, mode);
+              onCreate(name, cap, selectedMode);
             }}
           >Create</button>
         </div>
@@ -49,7 +48,7 @@ export default function Lobby({ rooms, onCreate, onJoin }: LobbyProps) {
             }`}
         >
           <div className="text-gray-200 text-sm mb-2">Configure Options</div>
-          <div className="flex items-center justify-between w-full">
+          <div className="flex items-center justify-between w-full mb-2">
             <label className="text-gray-300 text-sm">Capacity</label>
             <div className="relative w-30">
               <select
@@ -67,6 +66,61 @@ export default function Lobby({ rooms, onCreate, onJoin }: LobbyProps) {
               <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-gray-300">
                 ▾
               </span>
+            </div>
+          </div>
+          <div className="flex items-center justify-between w-full">
+            <label className="text-gray-300 text-sm">Game mode</label>
+            <div className="flex">
+              <button
+                type="button"
+                onClick={() => setSelectedMode('classic')}
+                className={`px-3 py-1.5 rounded-l-lg text-sm border border-white/10 transition ${selectedMode === 'classic'
+                  ? 'bg-neutral-200 text-neutral-900'
+                  : 'bg-[#272725] text-white hover:bg-neutral-200 hover:text-neutral-900'
+                  }`}
+              >
+                Classic
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedMode('perfect')}
+                className={`px-3 py-1.5 text-sm border-t border-b border-white/10 transition ${selectedMode === 'perfect'
+                  ? 'bg-neutral-200 text-neutral-900'
+                  : 'bg-[#272725] text-white hover:bg-neutral-200 hover:text-neutral-900'
+                  }`}
+              >
+                Perfect pitch
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedMode('reverse')}
+                className={`px-3 py-1.5 text-sm border-t border-b border-white/10 transition ${selectedMode === 'reverse'
+                  ? 'bg-neutral-200 text-neutral-900'
+                  : 'bg-[#272725] text-white hover:bg-neutral-200 hover:text-neutral-900'
+                  }`}
+              >
+                Reverse
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedMode('practice')}
+                className={`px-3 py-1.5 text-sm border-t border-b border-white/10 transition ${selectedMode === 'practice'
+                  ? 'bg-neutral-200 text-neutral-900'
+                  : 'bg-[#272725] text-white hover:bg-neutral-200 hover:text-neutral-900'
+                  }`}
+              >
+                Practice
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedMode('ai')}
+                className={`px-3 py-1.5 rounded-r-lg text-sm border border-white/10 transition ${selectedMode === 'ai'
+                  ? 'bg-neutral-200 text-neutral-900'
+                  : 'bg-[#272725] text-white hover:bg-neutral-200 hover:text-neutral-900'
+                  }`}
+              >
+                AI practice
+              </button>
             </div>
           </div>
         </div>
