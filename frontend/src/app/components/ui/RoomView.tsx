@@ -5,11 +5,11 @@ import Piano from "../Piano";
 
 type Player = { id: string; nickname: string | null; score: number; attempts?: number; rejected?: number };
 
-type RoomSnapshot = { id: string; name: string; capacity: number; players: Player[]; ready?: string[]; mode?: 'classic'|'perfect'|'reverse' };
+type RoomSnapshot = { id: string; name: string; capacity: number; players: Player[]; ready?: string[]; mode?: 'classic'|'perfect'|'reverse'|'practice' };
 
 type RoomViewProps = {
   room: RoomSnapshot;
-  phase: 'idle'|'demo'|'create'|'playback'|'replicate'|'ended'|'game_over'|null;
+  phase: 'idle'|'demo'|'create'|'playback'|'replicate'|'ended'|'game_over'|'practice'|null;
   banner: string;
   canPlay: boolean;
   replicatePattern: string[];
@@ -48,7 +48,9 @@ export default function RoomView({ room, phase, banner, canPlay, replicatePatter
   return (
     <div className="space-y-4 bg-[#272725] p-4 rounded-2xl text-gray-200">
       <div className="flex items-center justify-between">
-        <div className="text-sm font-medium">Room {room.name} ({room.id}) {room.players.length}/{room.capacity}</div>
+        <div className="text-sm font-medium">
+          Room {room.name} ({room.id}){room.mode !== 'practice' && ` ${room.players.length}/${room.capacity}`}
+        </div>
         <button onClick={onLeave} className="px-3 py-1.5 bg-red-800 text-white rounded-lg">Leave</button>
       </div>
 
@@ -101,14 +103,23 @@ export default function RoomView({ room, phase, banner, canPlay, replicatePatter
         })}
       </ul>
 
-      {(phase === null || phase === 'idle' || phase === 'game_over') && (
+      {(phase === null || phase === 'idle' || phase === 'game_over') && room.mode !== 'practice' && (
         <div className="flex gap-2">
           <button className="px-3 py-2 bg-green-900 text-white rounded-lg" onClick={() => onReady(true)}>Ready</button>
           <button className="px-3 py-2 bg-neutral-200 text-neutral-900 hover:bg-gray-400 transition rounded-lg" onClick={() => onReady(false)}>Unready</button>
         </div>
       )}
 
-      {(phase === 'demo' || phase === 'create' || phase === 'replicate' || phase === 'ended') && (
+      {(phase === 'practice' || room.mode === 'practice') && (
+        <div className="mt-2">
+          <div className="mb-3 p-3 bg-blue-900/30 rounded-lg text-sm text-gray-200">
+            Practice Mode: Click the keys to test sounds. No game logic, just practice!
+          </div>
+          <Piano onKeyClick={onKeyClick} disabled={false} highlightIndex={highlightIndex} highlightColor={highlightColor} />
+        </div>
+      )}
+
+      {(phase === 'demo' || phase === 'create' || phase === 'replicate' || phase === 'ended') && room.mode !== 'practice' && (
         <div className="mt-2">
           <Piano onKeyClick={onKeyClick} disabled={!canPlay} highlightIndex={highlightIndex} highlightColor={highlightColor} />
         </div>
