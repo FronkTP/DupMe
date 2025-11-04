@@ -12,7 +12,7 @@ export default function OnlineUsers({ users }: OnlineUsersProps) {
       <div className="hidden sm:block">Online</div>
       <div className="flex -space-x-2">
         {users.slice(0, 6).map((u) => (
-          <div key={u.id} title={`${u.nickname || u.id.slice(0,4)} — ${u.score}%`} className="h-6 w-6 rounded-full overflow-hidden border border-white bg-neutral-200">
+          <div key={u.id} title={`${u.nickname || u.id.slice(0,4)} — ${u.score}%`} className="h-6 w-6 rounded-full overflow-hidden border border-theme bg-neutral-200">
             {typeof u.avatar === 'string' && u.avatar ? (
               // Use data URLs, http(s), or absolute paths directly; otherwise resolve to /avatars/
               <img src={u.avatar.startsWith('data:') || u.avatar.startsWith('http') || u.avatar.startsWith('/') ? u.avatar : `/avatars/${u.avatar}`} alt={u.nickname || ''} className="h-6 w-6 object-cover block" />
@@ -25,7 +25,7 @@ export default function OnlineUsers({ users }: OnlineUsersProps) {
         ))}
       </div>
       {users.length > 6 && (
-        <div className="h-6 w-6 rounded-full bg-neutral-200 border border-white text-[10px] grid place-items-center text-neutral-700">+{users.length - 6}</div>
+        <div className="h-6 w-6 rounded-full bg-neutral-200 border border-theme text-[10px] grid place-items-center text-neutral-700">+{users.length - 6}</div>
       )}
     </div>
   );

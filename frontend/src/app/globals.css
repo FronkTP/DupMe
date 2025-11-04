@@ -15,17 +15,44 @@
 
 /* Base reset for full-viewport layout */
 html,
-body,
-:root {
+body {
   height: 100%;
+}
+
+/* Theme tokens (dark defaults) live on :root so they inherit everywhere */
+:root {
+  --app-bg-image: url('/main_background.webp');
+  --color-fg: var(--color-neutral-50);
+  --color-muted: #e5e7eb;
+  --surface: #272725;
+  --surface-muted: #2d2d2b;
+  --control-bg: rgba(255, 255, 255, 0.10);
+  --control-bg-hover: rgba(255, 255, 255, 0.15);
+  --control-fg: var(--color-neutral-50);
+  --border-color: rgba(255, 255, 255, 0.10);
+  --elev-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
   --card-bg: #272725;
+}
+
+/* Light theme overrides (toggle sets data-theme on <html>, which is :root) */
+:root[data-theme="light"] {
+  --app-bg-image: url('/light_background.webp');
+  --color-fg: #111827; /* gray-900 */
+  --color-muted: #4b5563; /* gray-600 */
+  --surface: rgba(255, 255, 255, 0.82);
+  --surface-muted: rgba(255, 255, 255, 0.70);
+  --control-bg: rgba(0, 0, 0, 0.06);
+  --control-bg-hover: rgba(0, 0, 0, 0.12);
+  --control-fg: #111827;
+  --border-color: rgba(0, 0, 0, 0.12);
+  --elev-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
 }
 
 /* Typography defaults */
 body {
   font-family: var(--font-sans);
   line-height: 1.6;
-  color: var(--color-neutral-50);
+  color: var(--color-fg);
 }
 
 /* Headings: keep h1 in Licorice, others readable display sans/serif mix */
@@ -106,3 +133,22 @@ input:disabled {
 a[role="button"] {
   cursor: pointer;
 }
+
+/* Theme utility classes */
+.text-foreground { color: var(--color-fg); }
+.text-muted { color: var(--color-muted); }
+.bg-surface { background: var(--surface); }
+.bg-surface-muted { background: var(--surface-muted); }
+.border-theme { border-color: var(--border-color); }
+.divide-theme > :not([hidden]) ~ :not([hidden]) { border-top-width: 1px; border-color: var(--border-color); }
+.card { background: var(--surface); color: var(--color-fg); border: 1px solid var(--border-color); }
+.control { background: var(--control-bg); color: var(--control-fg); border-color: var(--border-color); }
+.control:hover { background: var(--control-bg-hover); }
+
+/* Inputs with placeholder that adapts to theme */
+.themed-input {
+  background: var(--surface);
+  color: var(--color-fg);
+  border: 1px solid var(--border-color);
+}
+.themed-input::placeholder { color: var(--color-muted); opacity: 0.8; }

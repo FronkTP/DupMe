@@ -46,17 +46,17 @@ export default function RoomView({ room, phase, banner, canPlay, replicatePatter
     );
   };
   return (
-    <div className="space-y-4 bg-[#272725] p-4 rounded-2xl text-gray-200">
+    <div className="space-y-4 bg-surface border border-theme p-4 rounded-2xl">
       <div className="flex items-center justify-between">
         <div className="text-sm font-medium">Room {room.name} ({room.id}) {room.players.length}/{room.capacity}</div>
         <button onClick={onLeave} className="px-3 py-1.5 bg-red-800 text-white rounded-lg">Leave</button>
       </div>
 
       {banner && (
-        <div className="p-2 rounded-lg bg-[#272725] text-gray-200 flex items-center justify-between">
+        <div className="p-2 rounded-lg bg-surface-muted border border-theme flex items-center justify-between">
           <span>{banner}</span>
           {(phase === 'demo' || phase === 'create' || phase === 'playback' || phase === 'replicate') && typeof remainingSeconds === 'number' && (
-            <span className="inline-flex items-center gap-2 px-2 py-1 rounded-lg bg-black/30 border border-white/10 text-xs text-gray-200">
+            <span className="inline-flex items-center gap-2 px-2 py-1 rounded-lg control border text-xs">
               <span className="flex items-center gap-1" aria-hidden>
                 <ProgressRing value={typeof progress === 'number' ? progress : 0} />
                 <Timer size={16} />
@@ -67,7 +67,7 @@ export default function RoomView({ room, phase, banner, canPlay, replicatePatter
         </div>
       )}
 
-      <ul className="text-sm text-gray-200 space-y-1">
+      <ul className="text-sm space-y-1">
         {room.players.map((p) => {
           const playerState = playersState?.[p.id];
           const avatar = playerState?.avatar ?? undefined;
@@ -87,12 +87,12 @@ export default function RoomView({ room, phase, banner, canPlay, replicatePatter
                 <span>{displayName}</span>
               </span>
               <span className="flex gap-3 items-center">
-                <span className="text-gray-200">Score: {p.score}%</span>
+                <span className="text-muted">Score: {p.score}%</span>
                 {typeof p.attempts === 'number' && (
-                  <span className="text-gray-200">Attempts: {p.attempts}</span>
+                  <span className="text-muted">Attempts: {p.attempts}</span>
                 )}
                 {typeof p.rejected === 'number' && p.rejected > 0 && (
-                  <span className="text-gray-200">Ignored: {p.rejected}</span>
+                  <span className="text-muted">Ignored: {p.rejected}</span>
                 )}
                 {room.ready?.includes(p.id) && <span className="text-green-500">Ready</span>}
               </span>
@@ -121,21 +121,21 @@ export default function RoomView({ room, phase, banner, canPlay, replicatePatter
 	  )}
 
       {phase === 'replicate' && isCreator && (
-        <div className="mt-2 p-3 bg-[#272725] rounded-lg">
-          <p className="text-sm text-gray-200">Pattern:</p>
+        <div className="mt-2 p-3 bg-surface-muted border border-theme rounded-lg">
+          <p className="text-sm text-muted">Pattern:</p>
           <p className="text-lg tracking-widest">{(replicatePattern.length ? replicatePattern.map(labelFor) : []).join(' ') || '...'}</p>
         </div>
       )}
 
       {phase === 'create' && isCreator && (
-        <div className="mt-2 p-3 bg-[#272725] rounded-lg text-sm text-gray-200">
+        <div className="mt-2 p-3 bg-surface-muted border border-theme rounded-lg text-sm">
           <span>Notes added: {replicatePattern.length} / 10</span>
-          <span className="ml-3 text-gray-400">Extra clicks beyond 10 will be ignored</span>
+          <span className="ml-3 text-muted">Extra clicks beyond 10 will be ignored</span>
         </div>
       )}
 
       {phase === 'ended' && results && (
-        <div className="mt-2 p-4 bg-[#272725] rounded-lg">
+        <div className="mt-2 p-4 bg-surface-muted border border-theme rounded-lg">
           <p className="font-semibold mb-2">Round results</p>
           <ul className="space-y-1">
             {results.sort((a,b)=>b.score-a.score).map((r, idx, arr) => {
@@ -147,17 +147,17 @@ export default function RoomView({ room, phase, banner, canPlay, replicatePatter
                     {r.nickname || r.id.slice(0,4)}
                     {isWinner && <span className="ml-2 px-2 py-0.5 text-xs bg-yellow-500 text-black rounded">Winner</span>}
                   </span>
-                  <span className="text-gray-200">{r.score}%</span>
+                  <span className="text-muted">{r.score}%</span>
                 </li>
               );
             })}
           </ul>
-          <div className="mt-3 text-sm text-gray-200">Click Ready to start another round.</div>
+          <div className="mt-3 text-sm text-muted">Click Ready to start another round.</div>
         </div>
       )}
 
       {phase === 'game_over' && results && (
-        <div className="mt-2 p-4 bg-[#272725] rounded-lg">
+        <div className="mt-2 p-4 bg-surface-muted border border-theme rounded-lg">
           <p className="font-semibold mb-2">Game winners</p>
           <ul className="space-y-1">
             {results.sort((a,b)=>b.score-a.score).map((r, idx, arr) => {
@@ -169,12 +169,12 @@ export default function RoomView({ room, phase, banner, canPlay, replicatePatter
                     {r.nickname || r.id.slice(0,4)}
                     {isWinner && <span className="ml-2 px-2 py-0.5 text-xs bg-yellow-500 text-black rounded">Winner</span>}
                   </span>
-                  <span className="text-gray-200">{r.score}%</span>
+                  <span className="text-muted">{r.score}%</span>
                 </li>
               );
             })}
           </ul>
-          <div className="mt-3 text-sm text-gray-200">Click Ready to start a new game.</div>
+          <div className="mt-3 text-sm text-muted">Click Ready to start a new game.</div>
         </div>
       )}
     </div>
