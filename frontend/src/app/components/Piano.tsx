@@ -19,7 +19,7 @@ export default function Piano({ onKeyClick, disabled, highlightIndex = -1, highl
   };
 
   return (
-    <div className="relative w-full max-w-4xl mx-auto p-4 sm:p-5 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl shadow-[0_12px_40px_rgba(0,0,0,0.35)]">
+    <div className="relative w-full max-w-4xl mx-auto p-4 sm:p-5 rounded-2xl border border-theme bg-surface-muted backdrop-blur-xl" style={{ boxShadow: 'var(--elev-shadow)' }}>
       <div aria-hidden className="pointer-events-none absolute inset-0 rounded-2xl opacity-70"
         style={{ background: 'radial-gradient(900px 280px at 50% -10%, rgba(255,255,255,0.12), transparent)' }} />
       <div className="relative flex justify-center gap-2 sm:gap-3 select-none">

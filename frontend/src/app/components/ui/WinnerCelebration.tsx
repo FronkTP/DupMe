@@ -46,7 +46,7 @@ export default function WinnerCelebration({ open, winners, onDismiss }: WinnerCe
       aria-label="Winners announcement"
       onClick={onDismiss}
     >
-      {/* Backdrop */}
+      {/* Backdrop (kept dark overlay for focus) */}
       <div className="absolute inset-0 bg-black/40 backdrop-blur-xl" />
 
       {/* Soft radial highlight (reuses app aesthetic) */}
@@ -80,15 +80,16 @@ export default function WinnerCelebration({ open, winners, onDismiss }: WinnerCe
       {/* Card */}
       <div className="relative h-full w-full grid place-items-center p-4">
         <div
-          className="w-full max-w-md rounded-3xl border border-white/10 bg-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.35)] p-10 text-center text-gray-100 select-none"
+          className="w-full max-w-md rounded-3xl border border-theme bg-surface p-10 text-center select-none"
+          style={{ boxShadow: 'var(--elev-shadow)' }}
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="text-6xl font-fleur-de-leah tracking-wider text-yellow-300/90">Champion</div>
-          <div className="mt-2 text-3xl font-ancizar-sans sm:text-4xl text-gray-50">
+          <div className="text-6xl font-fleur-de-leah tracking-wider text-yellow-500">Champion</div>
+          <div className="mt-2 text-3xl font-ancizar-sans sm:text-4xl">
             {title}
           </div>
           {winners[0] && (
-            <div className="mt-2 text-sm font-ancizar-sans text-gray-300">Score: {winners[0].score}%</div>
+            <div className="mt-2 text-sm font-ancizar-sans text-muted">Score: {winners[0].score}%</div>
           )}
           <button
             className="mt-5 inline-flex items-center justify-center px-4 py-2 rounded-xl bg-neutral-200 text-neutral-900 hover:bg-gray-400 transition"

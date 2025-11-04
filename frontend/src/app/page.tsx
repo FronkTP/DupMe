@@ -8,7 +8,7 @@ import Lobby from './components/ui/Lobby';
 import RoomView from './components/ui/RoomView';
 import TrafficLights from './components/ui/TrafficLights';
 import WinnerCelebration from './components/ui/WinnerCelebration';
-import { Music, Pencil, Camera as CameraIcon, ImageUp } from 'lucide-react';
+import { Pencil, Camera as CameraIcon, ImageUp, Sun, Moon, CirclePlay } from 'lucide-react';
 import { ensureAudioContext, playSequence, playBeep, getSoundPack, setSoundPack } from './utils/audio';
 import VolumeControl from "./components/VolumeControl";
 
@@ -109,6 +109,27 @@ export default function Home() {
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const [volume, setVolume] = useState(0.5);
 
+
+  // Theme state (synced with <html data-theme> and localStorage)
+  const [theme, setTheme] = useState<'dark'|'light'>(() => 'dark');
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('dupme_theme');
+      const html = document.documentElement;
+      const current = html.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+      const effective = (saved === 'light' || saved === 'dark') ? (saved as 'light'|'dark') : current;
+      setTheme(effective);
+      if (effective === 'light') html.setAttribute('data-theme', 'light');
+      else html.removeAttribute('data-theme');
+    } catch {}
+  }, []);
+  const toggleTheme = () => {
+    const next: 'dark'|'light' = theme === 'light' ? 'dark' : 'light';
+    setTheme(next);
+    try { localStorage.setItem('dupme_theme', next); } catch {}
+    const html = document.documentElement;
+    if (next === 'light') html.setAttribute('data-theme', 'light'); else html.removeAttribute('data-theme');
+  };
 
 
   useEffect(() => {
@@ -515,18 +536,18 @@ export default function Home() {
   }, [results]);
 
   return (
-    <main className="min-h-screen p-3 w-full text-neutral-900 flex flex-col">
-      <header className="px-6 py-4 flex items-center justify-between shrink-0 text-gray-50">
+    <main className="min-h-screen p-3 w-full text-foreground flex flex-col">
+      <header className="px-6 py-4 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-4">
           <TrafficLights />
           <OnlineUsers users={gameState ? Object.values(gameState.players).map(p => ({ id: p.id, nickname: p.nickname ?? null, score: p.score, avatar: p.avatar ?? null })) : []} />
-          <a className="text-gray-200 text-3xl font-licorice hover:text-white" href="/leaderboard">Leaderboard</a>
+          <a className="text-muted text-3xl font-licorice hover:text-foreground" href="/leaderboard">Leaderboard</a>
         </div>
         <div className="text-xs flex items-center gap-4">
           <div className="flex items-center gap-1">
-            <span className="text-gray-300">Tone:</span>
+            <span className="text-muted">Tone:</span>
             <select
-              className="px-2 py-1 rounded bg-white/10 text-gray-100 border border-white/10"
+              className="px-2 py-1 rounded control border"
               value={soundPack}
               onChange={(e) => { const v = e.target.value as 'soft'|'classic'|'retro'; setSoundPack(v); setSoundPackState(v); }}
             >
@@ -535,14 +556,25 @@ export default function Home() {
               <option value="retro">Retro</option>
             </select>
           </div>
+          <button
+            type="button"
+            aria-label="Toggle theme"
+            aria-pressed={theme === 'light'}
+            onClick={toggleTheme}
+            className="px-2 py-1 rounded inline-flex items-center gap-1 control border"
+            title={theme === 'light' ? 'Switch to dark' : 'Switch to light'}
+          >
+            {theme === 'light' ? <Sun size={14} /> : <Moon size={14} />}
+            <span className="hidden sm:inline">{theme === 'light' ? 'Light' : 'Dark'}</span>
+          </button>
           <span>UID: {userId || '...'}</span>
         </div>
       </header>
 
       <section className="flex-1 flex flex-col items-center justify-center px-6 pb-28 pt-4 space-y-8 overflow-y-auto">
         <div className="text-center space-y-4">
-          <h1 className="text-8xl font-semibold font-licorice text-gray-50 tracking-tight">DupMe</h1>
-          <p className="text-lg text-gray-200">
+          <h1 className="text-8xl font-semibold font-licorice tracking-tight">DupMe</h1>
+          <p className="text-lg text-muted">
             {!room
               ? "Welcome!"
               : phase === 'create'
@@ -561,20 +593,20 @@ export default function Home() {
 
         {!hasNick && (
           <div className="w-full max-w-3xl mx-auto">
-            <div className="p-5 sm:p-6 rounded-3xl bg-[#272725] backdrop-blur-xl shadow-[0_12px_40px_rgba(0,0,0,0.35)] text-gray-100 space-y-3">
-              <p className="text-sm text-gray-200 mb-4">Enter your nickname to continue:</p>
+            <div className="p-5 sm:p-6 rounded-3xl bg-surface border border-theme backdrop-blur-xl space-y-3" style={{ boxShadow: 'var(--elev-shadow)' }}>
+              <p className="text-sm text-muted mb-4">Enter your nickname to continue:</p>
               <div className="flex flex-col sm:flex-row gap-3">
                 <input
                   value={nickname}
                   onChange={(e) => setNickname(e.target.value)}
-                  className="flex-1 px-4 py-3 rounded-2xl bg-[#272725] text-white placeholder-white/60 border-white/10 outline-none"
+                  className="flex-1 px-4 py-3 rounded-2xl themed-input outline-none"
                   placeholder="Nickname"
                 />
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-2">
+                <div className="flex items-center justify-center gap-3">
+                  <div className="flex items-center justify-center gap-2">
                     {/* Avatar preview / carousel toggle */}
                     <div>
-                      <div className="text-xs text-gray-300 mb-1 text-center w-full">Pick an avatar</div>
+                      <div className="text-xs text-muted mb-1 text-center w-full">Pick an avatar</div>
                       <div className="flex items-center gap-2">
                           <button onClick={() => {
                             const prev = (avatarIndex - 1 + AVATAR_LIST.length) % AVATAR_LIST.length;
@@ -582,24 +614,24 @@ export default function Home() {
                             setAvatarIndex(prev); setAvatar(nextPath); try { localStorage.setItem('dupme_avatar', nextPath); } catch {}
                             // Push to server so UI updates globally
                             if (socket) { const clean = nickname.trim(); socket.emit('CLIENT:SET_NICKNAME', { nickname: clean || nickname, userId, avatar: nextPath }); }
-                          }} className="p-2 rounded bg-white/10">&lt;</button>
+                          }} className="p-2 rounded control">&lt;</button>
                           <div className="relative">
                             <div
-                              className="h-20 w-20 rounded-full overflow-hidden border border-white bg-neutral-200 cursor-pointer"
+                              className="h-20 w-20 rounded-full overflow-hidden border border-theme bg-neutral-200 cursor-pointer"
                               title="Click to change avatar"
                               onClick={() => setShowAvatarMenu(v => !v)}
                             >
                               <img src={avatar || `/avatars/${AVATAR_LIST[avatarIndex]}`} alt="avatar large" className="h-20 w-20 object-cover" />
-                              <span className="absolute -right-1 -bottom-1 p-1 rounded-full bg-black/60 border border-white/40 text-white">
+                              <span className="absolute -right-1 -bottom-1 p-1 rounded-full bg-black/60 border border-theme text-white">
                                 <Pencil size={12} />
                               </span>
                             </div>
                             {showAvatarMenu && (
-                              <div className="absolute flex flex-col top-full mt-2 left-1/2 -translate-x-1/2 z-10 rounded-lg border border-white/10 bg-[#2d2d2b] text-xs text-gray-100 shadow-lg">
-                                <button className="px-3 py-2 flex items-center gap-3 justify-center hover:bg-white/10 w-full text-left" onClick={() => { setShowAvatarMenu(false); fileInputRef.current?.click(); }}>
+                              <div className="absolute flex flex-col top-full mt-2 left-1/2 -translate-x-1/2 z-10 rounded-lg border border-theme bg-surface-muted text-xs shadow-lg">
+                                <button className="px-3 py-2 flex items-center gap-3 justify-center control w-full text-left" onClick={() => { setShowAvatarMenu(false); fileInputRef.current?.click(); }}>
                                   <ImageUp size={30} /> <span className='text-xs'>Upload Image</span>
                                 </button>
-                                <button className="px-3 py-2 flex items-center gap-3 justify-center hover:bg-white/10 w-full text-left" onClick={() => { void startCamera(); }}>
+                                <button className="px-3 py-2 flex items-center gap-3 justify-center control w-full text-left" onClick={() => { void startCamera(); }}>
                                   <CameraIcon size={30} />
                                   <span className='text-xs'>Use Camera</span>
                                 </button>
@@ -612,7 +644,7 @@ export default function Home() {
                             setAvatarIndex(nxt); setAvatar(nextPath); try { localStorage.setItem('dupme_avatar', nextPath); } catch {}
                             // Push to server so UI updates globally
                             if (socket) { const clean = nickname.trim(); socket.emit('CLIENT:SET_NICKNAME', { nickname: clean || nickname, userId, avatar: nextPath }); }
-                          }} className="p-2 rounded bg-white/10">&gt;</button>
+                          }} className="p-2 rounded control">&gt;</button>
                           <input
                             ref={fileInputRef}
                             type="file"
@@ -641,7 +673,7 @@ export default function Home() {
                     </div>
                     {/* removed duplicate label */}
                   </div>
-                  <button onClick={submitNickname} className="p-4 rounded-full bg-neutral-200 text-neutral-900 hover:bg-gray-400 transition"><Music size={18} /></button>
+                  <button onClick={submitNickname} className="p-4 rounded-full bg-neutral-200 text-neutral-900 hover:bg-gray-400 transition"><CirclePlay size={18} /></button>
                 </div>
               </div>
               {/* carousel picker is inline in the preview; no separate grid here */}
@@ -654,12 +686,12 @@ export default function Home() {
             <div className="w-full max-w-2xl mx-auto">
               <Lobby rooms={rooms} onCreate={createRoom} onJoin={joinRoom} />
               {(lbAll.length > 0 || lbWeek.length > 0) && (
-                <div className="mt-6 p-5 rounded-2xl bg-[#272725] text-gray-100">
+                <div className="mt-6 p-5 rounded-2xl bg-surface border border-theme">
                   <div className="flex items-center justify-between mb-3">
                     <h2 className="text-sm font-semibold">Leaderboard</h2>
                     <div className="flex gap-2 text-xs">
-                      <button onClick={()=>setLbTab('all')} className={lbTab==='all'? 'px-2 py-1 rounded bg-white/10' : 'px-2 py-1 rounded bg-white/5'}>All‑time</button>
-                      <button onClick={()=>setLbTab('week')} className={lbTab==='week'? 'px-2 py-1 rounded bg-white/10' : 'px-2 py-1 rounded bg-white/5'}>This week</button>
+                      <button onClick={()=>setLbTab('all')} className={lbTab==='all'? 'px-2 py-1 rounded control' : 'px-2 py-1 rounded'}>All‑time</button>
+                      <button onClick={()=>setLbTab('week')} className={lbTab==='week'? 'px-2 py-1 rounded control' : 'px-2 py-1 rounded'}>This week</button>
                     </div>
                   </div>
                   <ul className="space-y-1 text-sm">
@@ -694,12 +726,12 @@ export default function Home() {
                 playersState={gameState?.players || {}}
               />
               {phase === 'game_over' && (lbAll.length > 0 || lbWeek.length > 0) && (
-                <div className="mt-6 p-5 rounded-2xl bg-[#272725] text-gray-100">
+                <div className="mt-6 p-5 rounded-2xl bg-surface border border-theme">
                   <div className="flex items-center justify-between mb-3">
                     <h2 className="text-sm font-semibold">Leaderboard</h2>
                     <div className="flex gap-2 text-xs">
-                      <button onClick={()=>setLbTab('all')} className={lbTab==='all'? 'px-2 py-1 rounded bg-white/10' : 'px-2 py-1 rounded bg-white/5'}>All‑time</button>
-                      <button onClick={()=>setLbTab('week')} className={lbTab==='week'? 'px-2 py-1 rounded bg-white/10' : 'px-2 py-1 rounded bg-white/5'}>This week</button>
+                      <button onClick={()=>setLbTab('all')} className={lbTab==='all'? 'px-2 py-1 rounded control' : 'px-2 py-1 rounded'}>All‑time</button>
+                      <button onClick={()=>setLbTab('week')} className={lbTab==='week'? 'px-2 py-1 rounded control' : 'px-2 py-1 rounded'}>This week</button>
                     </div>
                   </div>
                   <ul className="space-y-1 text-sm">
@@ -732,13 +764,13 @@ export default function Home() {
       {/* Camera modal */}
       {cameraOpen && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/60">
-          <div className="bg-[#272725] border border-white/10 rounded-2xl p-4 text-gray-100 w-[90vw] max-w-sm">
+          <div className="bg-surface border border-theme rounded-2xl p-4 w-[90vw] max-w-sm" style={{ boxShadow: 'var(--elev-shadow)' }}>
             <div className="text-sm mb-2">Take a photo</div>
-            <div className="rounded-xl overflow-hidden border border-white/10 bg-black/40">
+            <div className="rounded-xl overflow-hidden border border-theme bg-surface-muted">
               <video ref={videoRef} className="w-full h-auto" playsInline muted />
             </div>
             <div className="mt-3 flex justify-end gap-2">
-              <button className="px-3 py-1.5 rounded bg-white/10" onClick={stopCamera}>Cancel</button>
+              <button className="px-3 py-1.5 rounded control" onClick={stopCamera}>Cancel</button>
               <button className="px-3 py-1.5 rounded bg-neutral-200 text-neutral-900" onClick={takePhoto}>Use photo</button>
             </div>
           </div>

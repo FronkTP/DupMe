@@ -82,10 +82,16 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${licorice.variable} ${inter.variable} ${ancizarSerif.variable} ${ancizarSans.variable} ${fleurDeLeah.variable} ${rouge.variable} antialiased`}
       >
+        {/* Early theme init to avoid FOUC between dark/light */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(() => { try { const k='dupme_theme'; const saved=localStorage.getItem(k); const pref=saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'); if (pref==='light') document.documentElement.setAttribute('data-theme','light'); else document.documentElement.removeAttribute('data-theme'); } catch {} })();`
+          }}
+        />
         <div
           aria-hidden="true"
           className="fixed inset-0 -z-10 pointer-events-none bg-center bg-cover"
-          style={{ backgroundImage: "url('/main_background.webp')" }}
+          style={{ backgroundImage: "var(--app-bg-image)" }}
         />
         {children}
       </body>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from 'react';
+import { Sun, Moon } from 'lucide-react';
 
 const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:6996';
 
@@ -23,6 +24,26 @@ export default function LeaderboardPage() {
   const [weekRows, setWeekRows] = useState<LeaderRow[]>([]);
   const [meSummary, setMeSummary] = useState<MeSummary>(null);
   const [meRecent, setMeRecent] = useState<MeRecent>([]);
+
+  // Theme state (sync with html[data-theme])
+  const [theme, setTheme] = useState<'dark'|'light'>(() => 'dark');
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('dupme_theme');
+      const html = document.documentElement;
+      const current = html.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+      const effective = (saved === 'light' || saved === 'dark') ? (saved as 'light'|'dark') : current;
+      setTheme(effective);
+      if (effective === 'light') html.setAttribute('data-theme', 'light'); else html.removeAttribute('data-theme');
+    } catch {}
+  }, []);
+  const toggleTheme = () => {
+    const next: 'dark'|'light' = theme === 'light' ? 'dark' : 'light';
+    setTheme(next);
+    try { localStorage.setItem('dupme_theme', next); } catch {}
+    const html = document.documentElement;
+    if (next === 'light') html.setAttribute('data-theme', 'light'); else html.removeAttribute('data-theme');
+  };
 
   const fetchBoards = useCallback(async () => {
     const [ra, rw] = await Promise.all([
@@ -49,40 +70,51 @@ export default function LeaderboardPage() {
 
   const MiniRing = () => (
     <svg width="12" height="12" viewBox="0 0 20 20">
-      <circle cx="10" cy="10" r="8" stroke="rgba(255,255,255,0.2)" strokeWidth="3" fill="none" />
-      <circle cx="10" cy="10" r="8" stroke="white" strokeWidth="3" fill="none"
+      <circle cx="10" cy="10" r="8" stroke="currentColor" opacity="0.25" strokeWidth="3" fill="none" />
+      <circle cx="10" cy="10" r="8" stroke="currentColor" strokeWidth="3" fill="none"
         strokeDasharray={`30 50.265`} strokeLinecap="round" transform="rotate(-90 10 10)" />
     </svg>
   );
 
   return (
-    <main className="min-h-screen p-6 w-full text-gray-100">
+    <main className="min-h-screen p-6 w-full text-foreground">
       <div className="max-w-2xl mx-auto">
         <h1 className="text-7xl font-semibold mb-4">Leaderboard</h1>
-        <div className="flex gap-2 mb-4 text-xs">
-          <button onClick={()=>setTab('all')} className={tab==='all'? 'px-3 py-1 rounded bg-white/10' : 'px-3 py-1 rounded bg-white/5'}>All‑time</button>
-          <button onClick={()=>setTab('week')} className={tab==='week'? 'px-3 py-1 rounded bg-white/10' : 'px-3 py-1 rounded bg-white/5'}>This week</button>
-          <button onClick={()=>{ void fetchBoards(); void fetchMe(); }} className="ml-auto px-3 py-1 rounded bg-white/5">Refresh</button>
+        <div className="flex gap-2 mb-4 text-xs items-center">
+          <button onClick={()=>setTab('all')} className={tab==='all'? 'px-3 py-1 rounded control border' : 'px-3 py-1 rounded'}>All‑time</button>
+          <button onClick={()=>setTab('week')} className={tab==='week'? 'px-3 py-1 rounded control border' : 'px-3 py-1 rounded'}>This week</button>
+          <button
+            type="button"
+            aria-label="Toggle theme"
+            aria-pressed={theme === 'light'}
+            onClick={toggleTheme}
+            className="ml-auto px-2 py-1 rounded inline-flex items-center gap-1 control border"
+            title={theme === 'light' ? 'Switch to dark' : 'Switch to light'}
+          >
+            {theme === 'light' ? <Sun size={14} /> : <Moon size={14} />}
+            <span className="hidden sm:inline">{theme === 'light' ? 'Light' : 'Dark'}</span>
+          </button>
+          <button onClick={()=>{ void fetchBoards(); void fetchMe(); }} className="px-3 py-1 rounded control border">Refresh</button>
         </div>
-        <div className="p-5 rounded-2xl bg-[#272725]">
+        <div className="p-5 rounded-2xl bg-surface border border-theme">
           {rows.length === 0 ? (
-            <div className="text-sm text-gray-300">
+            <div className="text-sm text-muted">
               No entries yet.
-              <div className="mt-2 text-gray-400">
+              <div className="mt-2 text-muted">
                 Tip: Click Ready and finish a round. Scores are stored per device; use the same browser to build your record.
               </div>
             </div>
           ) : (
             <div className="text-sm">
-              <div className="grid grid-cols-6 gap-2 pb-2 border-b border-white/10 text-gray-300">
+              <div className="grid grid-cols-6 gap-2 pb-2 border-b border-theme text-muted">
                 <div>Player</div>
-                <div className="text-right flex items-center justify-end gap-2"><MiniRing /> Best</div>
+                <div className="text-right flex items-center justify-end gap-2 text-muted"><MiniRing /> Best</div>
                 <div className="text-right">Attempts@Best</div>
                 <div className="text-right">Games</div>
                 <div className="text-right">Total Att.</div>
                 <div className="text-right">Last played</div>
               </div>
-              <ul className="divide-y divide-white/10">
+              <ul className="divide-theme">
                 {rows.map((r, i) => (
                   <li key={r.user_id+i} className="grid grid-cols-6 gap-2 py-2">
                     <div className="truncate" title={r.nickname}>{r.nickname || r.user_id.slice(0,6)}</div>
@@ -98,10 +130,10 @@ export default function LeaderboardPage() {
           )}
         </div>
 
-        <div className="mt-6 p-5 rounded-2xl bg-[#272725]">
+        <div className="mt-6 p-5 rounded-2xl bg-surface border border-theme">
           <h2 className="text-sm font-semibold mb-3">My stats</h2>
           {!meSummary ? (
-            <div className="text-sm text-gray-300">No games recorded yet on this device.</div>
+            <div className="text-sm text-muted">No games recorded yet on this device.</div>
           ) : (
             <div className="space-y-3 text-sm">
               <div className="grid grid-cols-5 gap-2">
@@ -113,10 +145,10 @@ export default function LeaderboardPage() {
                 <div>Total Correct</div><div className="text-right">{meSummary.total_correct}</div>
                 <div>Total Attempts</div><div className="text-right">{meSummary.total_attempts}</div>
               </div>
-              <div className="text-xs text-gray-300">Last played: {new Date(meSummary.last_played).toLocaleString()}</div>
+              <div className="text-xs text-muted">Last played: {new Date(meSummary.last_played).toLocaleString()}</div>
               {meRecent.length > 0 && (
                 <div>
-                  <div className="mt-3 mb-2 text-xs text-gray-300">Recent rounds</div>
+                  <div className="mt-3 mb-2 text-xs text-muted">Recent rounds</div>
                   <ul className="space-y-1 text-sm">
                     {meRecent.map((r, i) => (
                       <li key={i} className="flex justify-between">
