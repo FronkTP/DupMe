@@ -54,6 +54,7 @@ type PlaySequenceOptions = {
   waveform?: OscillatorType;
   attackMs?: number;
   releaseMs?: number;
+  volume?: number;
 };
 
 export const playSequence = async (notes: string[], opts: PlaySequenceOptions = {}): Promise<void> => {
@@ -71,6 +72,7 @@ export const playSequence = async (notes: string[], opts: PlaySequenceOptions = 
   const release = (opts.releaseMs ?? defaultReleaseMs) / 1000;
   const defaultWave: OscillatorType = pack === 'soft' ? 'sine' : pack === 'retro' ? 'square' : 'triangle';
   const waveform: OscillatorType = opts.waveform ?? defaultWave;
+  const peakVolume = opts.volume ?? 0.9;
 
   let t = ctx.currentTime + 0.05; // small lead-in for stability
   for (const n of notes) {
@@ -82,8 +84,8 @@ export const playSequence = async (notes: string[], opts: PlaySequenceOptions = 
       osc.type = waveform;
       osc.frequency.value = freq;
       gain.gain.setValueAtTime(0, t);
-      gain.gain.linearRampToValueAtTime(0.9, t + attack);
-      gain.gain.setValueAtTime(0.9, t + dur - release);
+      gain.gain.linearRampToValueAtTime(peakVolume, t + attack);
+      gain.gain.setValueAtTime(peakVolume, t + dur - release);
       gain.gain.linearRampToValueAtTime(0.0001, t + dur);
       osc.connect(gain).connect(ctx.destination);
       osc.start(t);

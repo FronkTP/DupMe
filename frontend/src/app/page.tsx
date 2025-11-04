@@ -348,8 +348,8 @@ export default function Home() {
     const notes = (replicatePattern && replicatePattern.length > 0) ? replicatePattern : [];
     if (notes.length === 0) return;
     // Determine playback timing from last SERVER:PHASE payload (stored via demoNoteMs/gapMs if playback provided)
-    playSequence(notes, { noteMs: demoNoteMs || 500, gapMs: demoGapMs || 10 });
-  }, [phase, audioReady, phaseEndsAt, replicatePattern, lastPlaybackEndsAt, demoNoteMs, demoGapMs]);
+    playSequence(notes, { noteMs: demoNoteMs || 500, gapMs: demoGapMs || 10, volume });
+  }, [phase, audioReady, phaseEndsAt, replicatePattern, lastPlaybackEndsAt, demoNoteMs, demoGapMs, volume]);
 
   // Auto-play demo sequence and schedule highlights
   useEffect(() => {
@@ -360,7 +360,7 @@ export default function Home() {
     lastDemoEndsAtRef.current = phaseEndsAt;
     const seq = demoSequence && demoSequence.length ? demoSequence : ['C','D','E','F','G','A','B'];
     // Play audio demo for all modes; demo should always show visual highlights
-    playSequence(seq, { noteMs: demoNoteMs, gapMs: demoGapMs });
+    playSequence(seq, { noteMs: demoNoteMs, gapMs: demoGapMs, volume });
     // schedule highlighting using timeouts to ensure exact sequence (always visible during demo)
     const timeouts: number[] = [];
     for (let i = 0; i < seq.length; i++) {
@@ -370,7 +370,7 @@ export default function Home() {
     const clearId = window.setTimeout(() => { setHighlightIndex(-1); setHighlightColor(null); }, seq.length * (demoNoteMs + demoGapMs));
     timeouts.push(clearId);
     return () => { timeouts.forEach((id) => window.clearTimeout(id)); };
-  }, [phase, audioReady, phaseEndsAt, demoSequence, demoNoteMs, demoGapMs]);
+  }, [phase, audioReady, phaseEndsAt, demoSequence, demoNoteMs, demoGapMs, volume]);
 
   // Visual highlighting during playback (for classic & reverse modes)
   useEffect(() => {
@@ -425,11 +425,11 @@ export default function Home() {
         clickGlowTimeoutRef.current = window.setTimeout(() => { setHighlightIndex(-1); setHighlightColor(null); }, glowMs);
       }
       if (isCreator && phase === 'create' && audioReady) {
-        playSequence([note], { noteMs: 400, gapMs: 0 });
+        playSequence([note], { noteMs: 400, gapMs: 0, volume });
       }
     }
     socket.emit('CLIENT:SUBMIT_NOTE', note);
-  }, [socket, isCreator, phase, audioReady, replicatePattern]);
+  }, [socket, isCreator, phase, audioReady, replicatePattern, volume]);
 
   // Save nickname once per connection
   const submitNickname = useCallback(async () => {
@@ -567,6 +567,7 @@ export default function Home() {
             {theme === 'light' ? <Sun size={14} /> : <Moon size={14} />}
             <span className="hidden sm:inline">{theme === 'light' ? 'Light' : 'Dark'}</span>
           </button>
+          {hasNick && <VolumeControl volume={volume} setVolume={setVolume} />}
           <span>UID: {userId || '...'}</span>
         </div>
       </header>
@@ -707,7 +708,6 @@ export default function Home() {
             </div>
           ) : (
             <div className="w-full max-w-2xl mx-auto">
-              <VolumeControl volume={volume} setVolume={setVolume} />
               <RoomView
                 room={room}
                 phase={phase}
