@@ -18,7 +18,8 @@ export const listRooms = () => Object.values(rooms).map((r) => ({
 export const createRoom = ({ name, capacity, mode } = {}) => {
   const id = generateRoomId();
   const cap = Math.max(2, Math.min(12, Number(capacity) || 2));
-  const m = (mode === 'perfect' || mode === 'reverse') ? mode : 'classic';
+  // Accept practice and ai modes, but convert ai to classic for now
+  const m = (mode === 'perfect' || mode === 'reverse' || mode === 'practice') ? mode : 'classic';
   rooms[id] = { id, name: String(name || `Room ${id}`), capacity: cap, players: {}, ready: {}, joinOrder: [], mode: m };
   return id;
 };
@@ -37,6 +38,12 @@ export const getRoomSnapshot = (roomId, playersState) => {
   });
   const ready = Object.keys(room.ready || {}).filter((sid) => room.ready[sid]);
   return { id: room.id, name: room.name, capacity: room.capacity, players, ready, mode: room.mode || 'classic' };
+};
+
+// Check if a room is in practice mode
+export const isPracticeRoom = (roomId) => {
+  const room = rooms[roomId];
+  return room && room.mode === 'practice';
 };
 
 
