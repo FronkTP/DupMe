@@ -44,13 +44,13 @@ export default function Lobby({ rooms, onCreate, onJoin }: LobbyProps) {
         </div>
 
         <div
-          className={`overflow-hidden transition-all duration-500 ${showConfig ? "max-h-40 mt-4" : "max-h-0"
+          className={`transition-all duration-500 ${showConfig ? "max-h-40 mt-4" : "max-h-0"
             }`}
         >
           <div className="text-muted text-sm mb-2">Configure Options</div>
           <div className="flex items-center justify-between w-full mb-2">
             <label className="text-muted text-sm">Capacity</label>
-            <div className="relative w-24">
+            <div className="relative w-15">
               <select
                 id={capId}
                 defaultValue={2}
