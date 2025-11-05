@@ -56,7 +56,7 @@ type GameState = {
   currentRound: number;
 };
 type RoomListItem = { id: string; name: string; capacity: number; count: number };
-type RoomSnapshot = { id: string; name: string; capacity: number; players: Array<{ id: string; nickname: string | null; score: number; attempts?: number; rejected?: number }>; ready?: string[]; mode?: 'classic'|'perfect'|'reverse' };
+type RoomSnapshot = { id: string; name: string; capacity: number; players: Array<{ id: string; nickname: string | null; score: number; attempts?: number; rejected?: number }>; ready?: string[]; mode?: 'classic'|'perfect'|'reverse'|'practice' };
 
 export default function Home() {
   // Connection + identity
@@ -77,10 +77,10 @@ export default function Home() {
 
   // In-room status
   const [roomBanner, setRoomBanner] = useState<string>("");
-  const [phase, setPhase] = useState<'idle'|'demo'|'create'|'playback'|'replicate'|'ended'|'game_over'|null>(null);
+  const [phase, setPhase] = useState<'idle'|'demo'|'create'|'playback'|'replicate'|'ended'|'game_over'|'practice'|null>(null);
   const [creatorId, setCreatorId] = useState<string | null>(null);
   const [replicatePattern, setReplicatePattern] = useState<string[]>([]);
-  const [roomMode, setRoomMode] = useState<'classic'|'perfect'|'reverse'>('classic');
+  const [roomMode, setRoomMode] = useState<'classic'|'perfect'|'reverse'|'practice'>('classic');
   const [results, setResults] = useState<Array<{ id: string; nickname: string | null; score: number }> | null>(null);
   const [winnerOverlayOpen, setWinnerOverlayOpen] = useState<boolean>(false);
   const [phaseEndsAt, setPhaseEndsAt] = useState<number | null>(null);
@@ -175,9 +175,25 @@ export default function Home() {
     newSocket.on('SERVER:ROOMS', (list: RoomListItem[]) => setRooms(list));
     newSocket.on('SERVER:ROOM', (snapshot: RoomSnapshot) => {
       setRoom(snapshot);
-      if (snapshot?.mode) setRoomMode(snapshot.mode);
+      if (snapshot?.mode) {
+        setRoomMode(snapshot.mode);
+        // If practice mode, set phase to practice and ensure audio is ready
+        if (snapshot.mode === 'practice') {
+          setPhase('practice');
+          setRoomBanner('Practice Mode: Test the keyboard sounds');
+          void ensureAudio();
+        }
+      }
     });
-    newSocket.on('SERVER:JOINED_ROOM', () => setRoomBanner(""));
+    newSocket.on('SERVER:JOINED_ROOM', () => {
+      // Don't clear banner if we're in practice mode - it was already set by SERVER:ROOM
+      // We check phase because SERVER:ROOM sets phase='practice' for practice rooms
+      setRoomBanner((current) => {
+        // If current banner is the practice mode banner, keep it
+        if (current.includes('Practice Mode')) return current;
+        return "";
+      });
+    });
     newSocket.on('SERVER:LEFT_ROOM', () => {
       // Clear room-local UI state so stale phase/creator info doesn't linger
       setRoom(null);
@@ -190,7 +206,7 @@ export default function Home() {
       setResults(null);
     });
     type GameStartPayload = { roomId: string; creatorId?: string; phase?: 'create'; endsAt?: number; roundIndex?: number; totalRounds?: number; mode?: 'classic'|'perfect'|'reverse' };
-    type PhasePayload = { roomId: string; phase?: 'demo'|'create'|'playback'|'replicate'|'ended'|'game_over'; creatorId?: string; endsAt?: number; pattern?: string[]; sequence?: string[]; noteMs?: number; gapMs?: number; results?: Array<{ id: string; nickname: string | null; score: number }>; mode?: 'classic'|'perfect'|'reverse' } ;
+    type PhasePayload = { roomId: string; phase?: 'demo'|'create'|'playback'|'replicate'|'ended'|'game_over'|'practice'; creatorId?: string; endsAt?: number; pattern?: string[]; sequence?: string[]; noteMs?: number; gapMs?: number; results?: Array<{ id: string; nickname: string | null; score: number }>; mode?: 'classic'|'perfect'|'reverse'|'practice' } ;
     newSocket.on('SERVER:GAME_START', (p: GameStartPayload) => {
       setRoomBanner(`Round ${((p?.roundIndex ?? 0) + 1)}/${p?.totalRounds ?? ''} • Create phase: start playing notes`);
       setPhase('create');
@@ -206,6 +222,13 @@ export default function Home() {
       setPhase(p?.phase ?? null);
       setCreatorId(p?.creatorId ?? null);
       if (p?.mode) setRoomMode(p.mode || 'classic');
+      if (p?.phase === 'practice') {
+        setRoomBanner('Practice Mode: Test the keyboard sounds');
+        setReplicatePattern([]);
+        setResults(null);
+        // Ensure audio is ready for practice
+        void ensureAudio();
+      }
       if (p?.phase === 'demo') {
         setRoomBanner('Sound demo: listen to each note');
         setDemoSequence(p?.sequence || ['C','D','E','F','G','A','B']);
@@ -393,13 +416,26 @@ export default function Home() {
 
   // Derived flags for UI enablement
   const isCreator = creatorId ? myId === creatorId : false;
-  const canPlay = phase === 'create' ? isCreator : phase === 'replicate' ? !isCreator : false;
+  const canPlay = phase === 'practice' || roomMode === 'practice' ? true : phase === 'create' ? isCreator : phase === 'replicate' ? !isCreator : false;
 
 
   // Send a note to the server; server decides how to route it
   const handlePianoKeyClick = useCallback((note: string) => {
     if (!socket) return;
     const idx = ['C','D','E','F','G','A','B'].indexOf((note || '').toUpperCase());
+    
+    // Practice mode: just play sound, no game logic
+    if (phase === 'practice' || roomMode === 'practice') {
+      if (idx >= 0) {
+        setHighlightIndex(idx);
+        setHighlightColor(null);
+        if (clickGlowTimeoutRef.current) window.clearTimeout(clickGlowTimeoutRef.current);
+        clickGlowTimeoutRef.current = window.setTimeout(() => { setHighlightIndex(-1); setHighlightColor(null); }, 350);
+      }
+      if (audioReady) playSequence([note], { noteMs: 400, gapMs: 0 });
+      return; // Don't send to server in practice mode
+    }
+    
     if (!isCreator && phase === 'replicate') {
       const pattern = replicatePattern || [];
       const localIdx = replicateLocalIndexRef.current;
@@ -429,7 +465,7 @@ export default function Home() {
       }
     }
     socket.emit('CLIENT:SUBMIT_NOTE', note);
-  }, [socket, isCreator, phase, audioReady, replicatePattern, volume]);
+  }, [socket, isCreator, phase, audioReady, replicatePattern, roomMode, volume]);
 
   // Save nickname once per connection
   const submitNickname = useCallback(async () => {
@@ -443,7 +479,7 @@ export default function Home() {
   }, [socket, nickname, userId, avatar]);
 
   // Lobby actions
-  const createRoom = (name: string, capacity: number, mode: 'classic'|'perfect'|'reverse' = 'classic') => {
+  const createRoom = (name: string, capacity: number, mode: 'classic'|'perfect'|'reverse'|'practice'|'ai' = 'classic') => {
     if (!socket) return;
     // Ensure we left any previous room on the server to avoid race/linger issues
     const ensureLeft = () => new Promise<void>((resolve) => {
@@ -516,7 +552,7 @@ export default function Home() {
         return;
       }
       if (!hasNick) return;
-      if (!(phase === 'create' || phase === 'replicate')) return;
+      if (!(phase === 'create' || phase === 'replicate' || phase === 'practice')) return;
       if (!canPlay) return;
       const note = KEY_TO_NOTE[key];
       if (!note) return;

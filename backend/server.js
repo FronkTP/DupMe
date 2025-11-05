@@ -3,7 +3,7 @@ import { Server } from 'socket.io';
 import cors from 'cors';
 import express from 'express';
 import { toPercent } from './utils.js';
-import { rooms, listRooms, createRoom, getRoomSnapshot, CREATE_MAX_NOTES } from './rooms.js';
+import { rooms, listRooms, createRoom, getRoomSnapshot, CREATE_MAX_NOTES, isPracticeRoom } from './rooms.js';
 import { makeGameApi } from './game.js';
 import pkg from 'pg';
 const { Pool } = pkg;
@@ -173,6 +173,8 @@ io.on('connection', (socket) => {
     // If inside a room and in create/replicate phases, route accordingly
     const roomId = socket.data?.roomId;
     const room = roomId ? rooms[roomId] : null;
+    // Practice mode rooms don't process notes - they're handled client-side only
+    if (room && room.mode === 'practice') return;
     if (room && room.game) {
       if (room.game.phase === 'create' && room.game.creatorId === socket.id) {
         // Enforce hard cap on pattern length
@@ -251,6 +253,8 @@ io.on('connection', (socket) => {
     if (!roomId) return;
     const room = rooms[roomId];
     if (!room) return;
+    // Practice mode rooms don't use ready/game start logic
+    if (room.mode === 'practice') return;
     room.ready = room.ready || {};
     if (isReady) room.ready[socket.id] = true; else delete room.ready[socket.id];
     broadcastRoom(roomId);
@@ -283,6 +287,10 @@ function joinRoom(socket, roomId) {
   broadcastRoom(roomId);
   broadcastRooms();
   socket.emit('SERVER:JOINED_ROOM', roomId);
+  // Auto-start practice mode when joining a practice room
+  if (isPracticeRoom(roomId)) {
+    io.to(roomId).emit('SERVER:PHASE', { roomId, phase: 'practice', mode: 'practice' });
+  }
 }
 
 function leaveRoom(socket) {
