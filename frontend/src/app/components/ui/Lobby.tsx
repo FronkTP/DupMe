@@ -42,13 +42,10 @@ export default function Lobby({ rooms, onCreate, onJoin }: LobbyProps) {
             }}
           >Create</button>
         </div>
-
-        <div
-          className={`transition-all duration-500 ${showConfig ? "max-h-40 mt-4" : "max-h-0"
-            }`}
-        >
+        {showConfig && (
+        <div className="max-h-40 mt-4">
           <div className="text-muted text-sm mb-2">Configure Options</div>
-          <div className="flex items-center justify-between w-full mb-2">
+          <div className="flex items-center justify-between w-full mb-4">
             <label className="text-muted text-sm">Capacity</label>
             <div className="relative w-15">
               <select
@@ -124,6 +121,7 @@ export default function Lobby({ rooms, onCreate, onJoin }: LobbyProps) {
             </div>
           </div>
         </div>
+        )}
       </div>
 
       <div className="rounded-xl border border-theme bg-surface">
