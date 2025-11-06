@@ -3,7 +3,7 @@ import { Server } from 'socket.io';
 import cors from 'cors';
 import express from 'express';
 import { toPercent } from './utils.js';
-import { rooms, listRooms, createRoom, getRoomSnapshot, CREATE_MAX_NOTES, isPracticeRoom } from './rooms.js';
+import { rooms, listRooms, createRoom, getRoomSnapshot, CREATE_MAX_NOTES, isPracticeRoom, isAiPracticeRoom} from './rooms.js';
 import { makeGameApi } from './game.js';
 import pkg from 'pg';
 const { Pool } = pkg;
@@ -175,6 +175,8 @@ io.on('connection', (socket) => {
     const room = roomId ? rooms[roomId] : null;
     // Practice mode rooms don't process notes - they're handled client-side only
     if (room && room.mode === 'practice') return;
+    // AI practice mode rooms also don't process notes server-side
+    if (room && room.mode === 'ai') return;
     if (room && room.game) {
       if (room.game.phase === 'create' && room.game.creatorId === socket.id) {
         // Enforce hard cap on pattern length
@@ -255,6 +257,8 @@ io.on('connection', (socket) => {
     if (!room) return;
     // Practice mode rooms don't use ready/game start logic
     if (room.mode === 'practice') return;
+    // AI practice mode rooms also don't use ready/game start logic
+    if (room.mode === 'ai') return;
     room.ready = room.ready || {};
     if (isReady) room.ready[socket.id] = true; else delete room.ready[socket.id];
     broadcastRoom(roomId);
@@ -290,6 +294,10 @@ function joinRoom(socket, roomId) {
   // Auto-start practice mode when joining a practice room
   if (isPracticeRoom(roomId)) {
     io.to(roomId).emit('SERVER:PHASE', { roomId, phase: 'practice', mode: 'practice' });
+  }
+  // Auto-start AI practice mode when joining an AI practice room
+  if (isAiPracticeRoom(roomId)) {
+    io.to(roomId).emit('SERVER:PHASE', { roomId, phase: 'ai', mode: 'ai' });
   }
 }
 

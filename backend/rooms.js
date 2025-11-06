@@ -19,7 +19,7 @@ export const createRoom = ({ name, capacity, mode } = {}) => {
   const id = generateRoomId();
   const cap = Math.max(2, Math.min(12, Number(capacity) || 2));
   // Accept practice and ai modes, but convert ai to classic for now
-  const m = (mode === 'perfect' || mode === 'reverse' || mode === 'practice') ? mode : 'classic';
+  const m = (mode === 'perfect' || mode === 'reverse' || mode === 'practice' || mode === 'ai') ? mode : 'classic';
   rooms[id] = { id, name: String(name || `Room ${id}`), capacity: cap, players: {}, ready: {}, joinOrder: [], mode: m };
   return id;
 };
@@ -46,5 +46,8 @@ export const isPracticeRoom = (roomId) => {
   return room && room.mode === 'practice';
 };
 
-
+export const isAiPracticeRoom = (roomId) => {
+  const room = rooms[roomId];
+  return room && room.mode === 'ai';
+};
 

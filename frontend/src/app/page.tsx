@@ -56,7 +56,7 @@ type GameState = {
   currentRound: number;
 };
 type RoomListItem = { id: string; name: string; capacity: number; count: number };
-type RoomSnapshot = { id: string; name: string; capacity: number; players: Array<{ id: string; nickname: string | null; score: number; attempts?: number; rejected?: number }>; ready?: string[]; mode?: 'classic'|'perfect'|'reverse'|'practice' };
+type RoomSnapshot = { id: string; name: string; capacity: number; players: Array<{ id: string; nickname: string | null; score: number; attempts?: number; rejected?: number }>; ready?: string[]; mode?: 'classic'|'perfect'|'reverse'|'practice'|'ai' };
 
 export default function Home() {
   // Connection + identity
@@ -77,10 +77,10 @@ export default function Home() {
 
   // In-room status
   const [roomBanner, setRoomBanner] = useState<string>("");
-  const [phase, setPhase] = useState<'idle'|'demo'|'create'|'playback'|'replicate'|'ended'|'game_over'|'practice'|null>(null);
+  const [phase, setPhase] = useState<'idle'|'demo'|'create'|'playback'|'replicate'|'ended'|'game_over'|'practice'|'ai'|null>(null);
   const [creatorId, setCreatorId] = useState<string | null>(null);
   const [replicatePattern, setReplicatePattern] = useState<string[]>([]);
-  const [roomMode, setRoomMode] = useState<'classic'|'perfect'|'reverse'|'practice'>('classic');
+  const [roomMode, setRoomMode] = useState<'classic'|'perfect'|'reverse'|'practice'|'ai'>('classic');
   const [results, setResults] = useState<Array<{ id: string; nickname: string | null; score: number }> | null>(null);
   const [winnerOverlayOpen, setWinnerOverlayOpen] = useState<boolean>(false);
   const [phaseEndsAt, setPhaseEndsAt] = useState<number | null>(null);
@@ -183,6 +183,11 @@ export default function Home() {
           setRoomBanner('Practice Mode: Test the keyboard sounds');
           void ensureAudio();
         }
+        if (snapshot.mode === 'ai') {
+          setPhase('ai');
+          setRoomBanner('AI Practice Mode: Practice with AI-generated melodie');
+          void ensureAudio();
+        }
       }
     });
     newSocket.on('SERVER:JOINED_ROOM', () => {
@@ -206,7 +211,7 @@ export default function Home() {
       setResults(null);
     });
     type GameStartPayload = { roomId: string; creatorId?: string; phase?: 'create'; endsAt?: number; roundIndex?: number; totalRounds?: number; mode?: 'classic'|'perfect'|'reverse' };
-    type PhasePayload = { roomId: string; phase?: 'demo'|'create'|'playback'|'replicate'|'ended'|'game_over'|'practice'; creatorId?: string; endsAt?: number; pattern?: string[]; sequence?: string[]; noteMs?: number; gapMs?: number; results?: Array<{ id: string; nickname: string | null; score: number }>; mode?: 'classic'|'perfect'|'reverse'|'practice' } ;
+    type PhasePayload = { roomId: string; phase?: 'demo'|'create'|'playback'|'replicate'|'ended'|'game_over'|'practice'|'ai'; creatorId?: string; endsAt?: number; pattern?: string[]; sequence?: string[]; noteMs?: number; gapMs?: number; results?: Array<{ id: string; nickname: string | null; score: number }>; mode?: 'classic'|'perfect'|'reverse'|'practice'|'ai' } ;
     newSocket.on('SERVER:GAME_START', (p: GameStartPayload) => {
       setRoomBanner(`Round ${((p?.roundIndex ?? 0) + 1)}/${p?.totalRounds ?? ''} • Create phase: start playing notes`);
       setPhase('create');
@@ -224,6 +229,13 @@ export default function Home() {
       if (p?.mode) setRoomMode(p.mode || 'classic');
       if (p?.phase === 'practice') {
         setRoomBanner('Practice Mode: Test the keyboard sounds');
+        setReplicatePattern([]);
+        setResults(null);
+        // Ensure audio is ready for practice
+        void ensureAudio();
+      }
+      if (p?.phase === 'ai') {
+        setRoomBanner('Ai Practice Mode: Practice with AI-generated melodies');
         setReplicatePattern([]);
         setResults(null);
         // Ensure audio is ready for practice
@@ -416,7 +428,9 @@ export default function Home() {
 
   // Derived flags for UI enablement
   const isCreator = creatorId ? myId === creatorId : false;
-  const canPlay = phase === 'practice' || roomMode === 'practice' ? true : phase === 'create' ? isCreator : phase === 'replicate' ? !isCreator : false;
+  // Allow playing keys in both practice and ai, whether set as phase or room mode
+  const isPracticeActive = phase === 'practice' || phase === 'ai' || roomMode === 'practice' || roomMode === 'ai';
+  const canPlay = isPracticeActive ? true : phase === 'create' ? isCreator : phase === 'replicate' ? !isCreator : false;
 
 
   // Send a note to the server; server decides how to route it
@@ -425,7 +439,7 @@ export default function Home() {
     const idx = ['C','D','E','F','G','A','B'].indexOf((note || '').toUpperCase());
     
     // Practice mode: just play sound, no game logic
-    if (phase === 'practice' || roomMode === 'practice') {
+    if (phase === 'practice' || roomMode === 'practice' || phase === 'ai' || roomMode === 'ai') {
       if (idx >= 0) {
         setHighlightIndex(idx);
         setHighlightColor(null);
@@ -481,7 +495,8 @@ export default function Home() {
   // Lobby actions
   const createRoom = (name: string, capacity: number, mode: 'classic'|'perfect'|'reverse'|'practice'|'ai' = 'classic') => {
     if (!socket) return;
-    // Ensure we left any previous room on the server to avoid race/linger issues
+    // log when the create button is pressed and which mode is requested
+    console.log('[UI] createRoom pressed, mode=', mode, { name, capacity });
     const ensureLeft = () => new Promise<void>((resolve) => {
       if (!socket) return resolve();
       let done = false;
@@ -494,7 +509,6 @@ export default function Home() {
     });
     void ensureLeft().then(() => socket.emit('ROOMS:CREATE', { name, capacity, mode }));
   };
-
   const joinRoom = (id: string) : void => {
     if (!socket) return;
     // Ensure we left any previous room on the server first
@@ -552,7 +566,8 @@ export default function Home() {
         return;
       }
       if (!hasNick) return;
-      if (!(phase === 'create' || phase === 'replicate' || phase === 'practice')) return;
+      // permit key input during create/replicate and both practice modes (including ai)
+      if (!(phase === 'create' || phase === 'replicate' || phase === 'practice' || phase === 'ai')) return;
       if (!canPlay) return;
       const note = KEY_TO_NOTE[key];
       if (!note) return;
