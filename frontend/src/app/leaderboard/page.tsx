@@ -24,6 +24,7 @@ export default function LeaderboardPage() {
   const [weekRows, setWeekRows] = useState<LeaderRow[]>([]);
   const [meSummary, setMeSummary] = useState<MeSummary>(null);
   const [meRecent, setMeRecent] = useState<MeRecent>([]);
+  const [loading, setLoading] = useState(true);
 
   // Theme state (sync with html[data-theme])
   const [theme, setTheme] = useState<'dark'|'light'>(() => 'dark');
@@ -46,12 +47,14 @@ export default function LeaderboardPage() {
   };
 
   const fetchBoards = useCallback(async () => {
+    setLoading(true);
     const [ra, rw] = await Promise.all([
       fetch(`${SOCKET_URL}/leaderboard?range=all`).then(r=>r.json()).catch(()=>[]),
       fetch(`${SOCKET_URL}/leaderboard?range=week`).then(r=>r.json()).catch(()=>[]),
     ]);
     setAllRows(Array.isArray(ra) ? ra : []);
     setWeekRows(Array.isArray(rw) ? rw : []);
+    setLoading(false);
   }, []);
 
   const fetchMe = useCallback(async () => {
@@ -76,6 +79,35 @@ export default function LeaderboardPage() {
     </svg>
   );
 
+  const LoadingSkeleton = () => (
+    <div className="flex flex-col items-center justify-center py-12 text-muted">
+      <svg
+        width="48"
+        height="48"
+        viewBox="0 0 32 32"
+        className="mb-4 animate-pulse"
+        style={{
+          animation: 'float 2s ease-in-out infinite, pulse 2s ease-in-out infinite',
+        }}
+      >
+        <circle cx="11" cy="22" r="3.2" fill="currentColor" opacity="0.6" />
+        <rect x="14.2" y="9" width="2.4" height="13" rx="1.2" fill="currentColor" opacity="0.6" />
+        <path
+          d="M16.6 9 C18.2 9 20.5 8.5 22 7.5 C22.8 7 23.5 6.2 23.8 5.2 C24 4.5 23.9 3.8 23.5 3.2 C23 2.5 22.2 2.2 21.4 2.4 C20.5 2.6 19.8 3.3 19.5 4.1 C19.2 5 19.2 6 19.5 6.9 L16.6 9 Z"
+          fill="currentColor"
+          opacity="0.6"
+        />
+      </svg>
+      <p className="text-sm">Loading leaderboard data...</p>
+      <style jsx>{`
+        @keyframes float {
+          0%, 100% { transform: translateY(0px); }
+          50% { transform: translateY(-8px); }
+        }
+      `}</style>
+    </div>
+  );
+
   return (
     <main className="min-h-screen p-6 w-full text-foreground">
       <div className="max-w-2xl mx-auto">
@@ -97,7 +129,9 @@ export default function LeaderboardPage() {
           <button onClick={()=>{ void fetchBoards(); void fetchMe(); }} className="px-3 py-1 rounded control border">Refresh</button>
         </div>
         <div className="p-5 rounded-2xl bg-surface border border-theme">
-          {rows.length === 0 ? (
+          {loading ? (
+            <LoadingSkeleton />
+          ) : rows.length === 0 ? (
             <div className="text-sm text-muted">
               No entries yet.
               <div className="mt-2 text-muted">
@@ -132,7 +166,9 @@ export default function LeaderboardPage() {
 
         <div className="mt-6 p-5 rounded-2xl bg-surface border border-theme">
           <h2 className="text-sm font-semibold mb-3">My stats</h2>
-          {!meSummary ? (
+          {loading ? (
+            <LoadingSkeleton />
+          ) : !meSummary ? (
             <div className="text-sm text-muted">No games recorded yet on this device.</div>
           ) : (
             <div className="space-y-3 text-sm">
