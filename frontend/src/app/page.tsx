@@ -11,6 +11,7 @@ import WinnerCelebration from './components/ui/WinnerCelebration';
 import { Pencil, Camera as CameraIcon, ImageUp, Sun, Moon, CirclePlay } from 'lucide-react';
 import { ensureAudioContext, playSequence, playBeep, getSoundPack, setSoundPack } from './utils/audio';
 import VolumeControl from "./components/VolumeControl";
+import { gsap } from 'gsap';
 
 // Downscale and compress an image file to a small data URL suitable for realtime sockets
 async function toAvatarDataUrl(file: File, maxDim = 160): Promise<string> {
@@ -109,6 +110,11 @@ export default function Home() {
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const [volume, setVolume] = useState(0.5);
 
+  // Refs for GSAP page transitions
+  const nicknameContainerRef = useRef<HTMLDivElement>(null);
+  const lobbyContainerRef = useRef<HTMLDivElement>(null);
+  const roomContainerRef = useRef<HTMLDivElement>(null);
+
   // Admin modal state
   const [showAdminModal, setShowAdminModal] = useState<boolean>(false);
   const [adminPassword, setAdminPassword] = useState<string>("");
@@ -135,6 +141,28 @@ export default function Home() {
     if (next === 'light') html.setAttribute('data-theme', 'light'); else html.removeAttribute('data-theme');
   };
 
+  // GSAP Page Transitions - Premium, effortless fade + subtle scale
+  useEffect(() => {
+    // Transition: Nickname → Lobby (when hasNick becomes true and no room)
+    if (hasNick && !room && lobbyContainerRef.current) {
+      // Subtle fade in with gentle scale
+      gsap.fromTo(
+        lobbyContainerRef.current,
+        { opacity: 0, scale: 0.97 },
+        { opacity: 1, scale: 1, duration: 0.5, ease: 'power2.out' }
+      );
+    }
+
+    // Transition: Lobby → Game Room (when room becomes truthy)
+    if (hasNick && room && roomContainerRef.current) {
+      // Subtle fade in with gentle scale
+      gsap.fromTo(
+        roomContainerRef.current,
+        { opacity: 0, scale: 0.97 },
+        { opacity: 1, scale: 1, duration: 0.5, ease: 'power2.out' }
+      );
+    }
+  }, [hasNick, room]);
 
   useEffect(() => {
     // Open socket connection once
@@ -658,7 +686,7 @@ export default function Home() {
         </div>
 
         {!hasNick && (
-          <div className="w-full max-w-3xl mx-auto">
+          <div ref={nicknameContainerRef} className="w-full max-w-3xl mx-auto">
             <div className="p-5 sm:p-6 rounded-3xl bg-surface border border-theme backdrop-blur-xl space-y-3" style={{ boxShadow: 'var(--elev-shadow)' }}>
               <p className="text-sm text-muted mb-4">Enter your nickname to continue:</p>
               <div className="flex flex-col sm:flex-row gap-3">
@@ -749,7 +777,7 @@ export default function Home() {
 
         {hasNick && (
           !room ? (
-            <div className="w-full max-w-2xl mx-auto">
+            <div ref={lobbyContainerRef} className="w-full max-w-2xl mx-auto">
               <Lobby rooms={rooms} onCreate={createRoom} onJoin={joinRoom} />
               {(lbAll.length > 0 || lbWeek.length > 0) && (
                 <div className="mt-6 p-5 rounded-2xl bg-surface border border-theme">
@@ -772,7 +800,7 @@ export default function Home() {
               )}
             </div>
           ) : (
-            <div className="w-full max-w-2xl mx-auto">
+            <div ref={roomContainerRef} className="w-full max-w-2xl mx-auto">
               <RoomView
                 room={room}
                 phase={phase}
