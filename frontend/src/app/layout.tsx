@@ -68,8 +68,11 @@ const ancizarSans = localFont({
 })
 
 export const metadata: Metadata = {
-  title: "Dupme",
+  title: "DupMe",
   description: "Why waste 100 bytes when you can waste 1000000 bytes?",
+  icons: {
+    icon: '/favicon.svg',
+  },
 };
 
 export default function RootLayout({

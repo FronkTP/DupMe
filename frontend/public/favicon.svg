@@ -1,0 +1,17 @@
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background with rounded corners -->
+  <rect width="32" height="32" rx="6" fill="#272725"/>
+
+  <!-- Abstract minimalist music note -->
+  <!-- Bottom note head -->
+  <circle cx="11" cy="22" r="3.2" fill="#e5e7eb"/>
+
+  <!-- Vertical stem -->
+  <rect x="14.2" y="9" width="2.4" height="13" rx="1.2" fill="#e5e7eb"/>
+
+  <!-- Top note flag (flowing abstract shape) -->
+  <path d="M16.6 9 C18 8.5, 21 7, 23 9.5 C25 12, 23.5 14, 21 14.5 C19 15, 17.5 14, 16.6 12.5 Z" fill="#e5e7eb"/>
+
+  <!-- Small accent circle for visual balance -->
+  <circle cx="22" cy="11" r="1.5" fill="#272725" opacity="0.3"/>
+</svg>

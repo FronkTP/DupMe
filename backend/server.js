@@ -23,8 +23,88 @@ app.use(cors({
   },
   methods: ['GET','POST'],
 }));
+app.use(express.json());
+
 // simple health endpoint for platform checks
 app.get('/health', (_req, res) => res.status(200).send('ok'));
+
+// --- Admin Authentication System ---
+import crypto from 'crypto';
+
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin456';
+const ADMIN_READ_PASSWORD = process.env.ADMIN_READ_PASSWORD || 'viewer123';
+const adminTokens = new Map(); // token -> { mode, expiresAt }
+
+// Validate password and issue token
+app.post('/admin/validate', (req, res) => {
+  const { password } = req.body;
+
+  let mode = null;
+  if (password === ADMIN_PASSWORD) mode = 'full';
+  else if (password === ADMIN_READ_PASSWORD) mode = 'readonly';
+  else return res.status(401).json({ valid: false, error: 'Invalid password' });
+
+  // Generate random token
+  const token = crypto.randomBytes(32).toString('hex');
+
+  // Store token with mode and expiration (1 hour)
+  adminTokens.set(token, {
+    mode,
+    expiresAt: Date.now() + 3600000 // 1 hour
+  });
+
+  res.json({ token, mode, valid: true });
+});
+
+// Verify token validity
+app.get('/admin/verify', (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  const tokenData = verifyAdminToken(token);
+
+  if (!tokenData) {
+    return res.status(403).json({ valid: false, error: 'Invalid or expired token' });
+  }
+
+  res.json({ valid: true, mode: tokenData.mode });
+});
+
+// Token verification helper
+function verifyAdminToken(token) {
+  if (!token) return null;
+
+  const tokenData = adminTokens.get(token);
+  if (!tokenData) return null;
+
+  // Check expiration
+  if (Date.now() > tokenData.expiresAt) {
+    adminTokens.delete(token);
+    return null;
+  }
+
+  return tokenData;
+}
+
+// Middleware: Require any admin token
+function requireAdminToken(req, res, next) {
+  const token = req.headers.authorization?.split(' ')[1];
+  const tokenData = verifyAdminToken(token);
+
+  if (!tokenData) {
+    return res.status(403).json({ error: 'Admin authentication required' });
+  }
+
+  req.adminMode = tokenData.mode;
+  next();
+}
+
+// Middleware: Require full admin mode
+function requireFullAdmin(req, res, next) {
+  if (req.adminMode !== 'full') {
+    return res.status(403).json({ error: 'Full admin access required' });
+  }
+  next();
+}
+
 const server = http.createServer(app);
 const PORT = process.env.PORT || 6996;
 
@@ -398,5 +478,186 @@ app.get('/leaderboard/me', async (req, res) => {
   } catch (e) {
     res.status(500).json({ summary: null, recent: [], error: 'leaderboard_me_failed' });
   }
+});
+
+// --- Admin API Endpoints ---
+
+// Get server statistics (both tiers)
+app.get('/admin/stats', requireAdminToken, (req, res) => {
+  const stats = {
+    players: Object.keys(gameState.players).length,
+    rooms: Object.keys(rooms).length,
+    activeGames: Object.values(rooms).filter(r => r.game && r.game.phase !== 'idle').length,
+    uptime: process.uptime(),
+    memory: process.memoryUsage(),
+    timestamp: Date.now(),
+  };
+  res.json(stats);
+});
+
+// Get all connected players (both tiers)
+app.get('/admin/players', requireAdminToken, (req, res) => {
+  const players = Object.entries(gameState.players).map(([socketId, data]) => ({
+    socketId,
+    nickname: data.nickname || 'Anonymous',
+    userId: data.userId || null,
+    score: data.score || 0,
+    room: Object.keys(rooms).find(roomId => rooms[roomId].players[socketId]) || null,
+  }));
+  res.json(players);
+});
+
+// Get all rooms with details (both tiers)
+app.get('/admin/rooms', requireAdminToken, (req, res) => {
+  const roomList = Object.values(rooms).map(room => ({
+    id: room.id,
+    name: room.name,
+    capacity: room.capacity,
+    playerCount: Object.keys(room.players).length,
+    players: Object.keys(room.players).map(sid => ({
+      socketId: sid,
+      nickname: gameState.players[sid]?.nickname || 'Anonymous',
+      ready: room.ready?.[sid] || false,
+    })),
+    mode: room.mode || 'classic',
+    game: room.game ? {
+      phase: room.game.phase,
+      round: room.game.roundIndex + 1,
+      totalRounds: room.game.order?.length || 0,
+      creatorId: room.game.creatorId,
+      patternLength: room.game.pattern?.length || 0,
+    } : null,
+  }));
+  res.json(roomList);
+});
+
+// Get database statistics (both tiers)
+app.get('/admin/db-stats', requireAdminToken, async (req, res) => {
+  if (!db) {
+    return res.json({ enabled: false, totalUsers: 0, totalResults: 0, recentGames: [] });
+  }
+
+  try {
+    const usersQuery = await db.query('SELECT COUNT(*) as count FROM users');
+    const resultsQuery = await db.query('SELECT COUNT(*) as count FROM results');
+    const recentQuery = await db.query(`
+      SELECT r.nickname, r.percent, r.created_at
+      FROM results r
+      ORDER BY r.created_at DESC
+      LIMIT 10
+    `);
+
+    res.json({
+      enabled: true,
+      totalUsers: parseInt(usersQuery.rows[0]?.count || 0),
+      totalResults: parseInt(resultsQuery.rows[0]?.count || 0),
+      recentGames: recentQuery.rows || [],
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'db_stats_failed', message: e.message });
+  }
+});
+
+// Kick player (full admin only)
+app.post('/admin/kick-player', requireAdminToken, requireFullAdmin, (req, res) => {
+  const { socketId } = req.body;
+
+  if (!socketId) {
+    return res.status(400).json({ error: 'socketId required' });
+  }
+
+  const socket = io.sockets.sockets.get(socketId);
+  if (socket) {
+    socket.disconnect(true);
+    res.json({ success: true, message: 'Player kicked' });
+  } else {
+    res.status(404).json({ error: 'Socket not found' });
+  }
+});
+
+// End game in a room (full admin only)
+app.post('/admin/end-game', requireAdminToken, requireFullAdmin, (req, res) => {
+  const { roomId } = req.body;
+
+  if (!roomId) {
+    return res.status(400).json({ error: 'roomId required' });
+  }
+
+  const room = rooms[roomId];
+  if (!room) {
+    return res.status(404).json({ error: 'Room not found' });
+  }
+
+  if (!room.game || room.game.phase === 'idle') {
+    return res.json({ success: false, message: 'No active game in this room' });
+  }
+
+  // Force game over
+  const results = (room.game.order || []).map((sid) => ({
+    id: sid,
+    nickname: gameState.players[sid]?.nickname || null,
+    score: toPercent(room.game.scores?.[sid] || 0, room.game.attempts?.[sid] || 0),
+  }));
+
+  room.game.phase = 'game_over';
+  io.to(roomId).emit('SERVER:GAME_END', { roomId, results });
+
+  res.json({ success: true, message: 'Game ended' });
+});
+
+// Delete room (full admin only)
+app.post('/admin/delete-room', requireAdminToken, requireFullAdmin, (req, res) => {
+  const { roomId } = req.body;
+
+  if (!roomId) {
+    return res.status(400).json({ error: 'roomId required' });
+  }
+
+  const room = rooms[roomId];
+  if (!room) {
+    return res.status(404).json({ error: 'Room not found' });
+  }
+
+  // Disconnect all players in the room
+  Object.keys(room.players).forEach(socketId => {
+    const socket = io.sockets.sockets.get(socketId);
+    if (socket) {
+      socket.leave(roomId);
+      socket.emit('SERVER:LEFT_ROOM');
+      if (socket.data) socket.data.roomId = null;
+    }
+  });
+
+  // Delete the room
+  delete rooms[roomId];
+  broadcastRooms();
+
+  res.json({ success: true, message: 'Room deleted' });
+});
+
+// Clear leaderboard (full admin only)
+app.delete('/admin/clear-leaderboard', requireAdminToken, requireFullAdmin, async (req, res) => {
+  if (!db) {
+    return res.status(400).json({ error: 'Database not enabled' });
+  }
+
+  try {
+    await db.query('TRUNCATE TABLE results');
+    res.json({ success: true, message: 'Leaderboard cleared' });
+  } catch (e) {
+    res.status(500).json({ error: 'clear_failed', message: e.message });
+  }
+});
+
+// Broadcast global message (full admin only)
+app.post('/admin/broadcast', requireAdminToken, requireFullAdmin, (req, res) => {
+  const { message } = req.body;
+
+  if (!message) {
+    return res.status(400).json({ error: 'message required' });
+  }
+
+  io.emit('ADMIN:MESSAGE', { message, timestamp: Date.now() });
+  res.json({ success: true, message: 'Broadcast sent' });
 });
 

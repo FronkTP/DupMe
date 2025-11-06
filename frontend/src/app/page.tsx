@@ -109,6 +109,10 @@ export default function Home() {
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const [volume, setVolume] = useState(0.5);
 
+  // Admin modal state
+  const [showAdminModal, setShowAdminModal] = useState<boolean>(false);
+  const [adminPassword, setAdminPassword] = useState<string>("");
+  const [adminError, setAdminError] = useState<string>("");
 
   // Theme state (synced with <html data-theme> and localStorage)
   const [theme, setTheme] = useState<'dark'|'light'>(() => 'dark');
@@ -319,6 +323,30 @@ export default function Home() {
     if (socket) { const clean = nickname.trim(); socket.emit('CLIENT:SET_NICKNAME', { nickname: clean || nickname, userId, avatar: dataUrl }); }
     stopCamera();
   }, [nickname, socket, stopCamera, userId]);
+
+  // Admin access handler
+  const handleAdminAccess = useCallback(async () => {
+    setAdminError("");
+
+    try {
+      const res = await fetch(`${SOCKET_URL}/admin/validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: adminPassword }),
+      });
+
+      if (res.ok) {
+        const { token, mode } = await res.json();
+        sessionStorage.setItem('admin_token', token);
+        sessionStorage.setItem('admin_mode', mode);
+        window.location.href = '/admin';
+      } else {
+        setAdminError("Invalid password");
+      }
+    } catch (e) {
+      setAdminError("Connection error");
+    }
+  }, [adminPassword]);
 
   // keep avatarIndex in sync when avatar changes (must be at top-level of component)
   useEffect(() => {
@@ -809,6 +837,61 @@ export default function Home() {
             <div className="mt-3 flex justify-end gap-2">
               <button className="px-3 py-1.5 rounded control" onClick={stopCamera}>Cancel</button>
               <button className="px-3 py-1.5 rounded bg-neutral-200 text-neutral-900" onClick={takePhoto}>Use photo</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Server Management Button */}
+      <button
+        onClick={() => setShowAdminModal(true)}
+        className="fixed bottom-4 left-4 px-3 py-1.5 text-xs opacity-50 hover:opacity-100 transition-opacity rounded control"
+        title="Server Management"
+      >
+        🔧 Server Management
+      </button>
+
+      {/* Admin Password Modal */}
+      {showAdminModal && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-surface border border-theme rounded-3xl p-6 w-[90vw] max-w-md backdrop-blur-xl" style={{ boxShadow: 'var(--elev-shadow)' }}>
+            <h2 className="text-xl font-semibold mb-2">Server Management Access</h2>
+            <p className="text-sm text-muted mb-5">
+              Enter the admin password to access the server dashboard.
+            </p>
+            <div className="space-y-3">
+              <input
+                type="password"
+                value={adminPassword}
+                onChange={(e) => setAdminPassword(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleAdminAccess()}
+                placeholder="Password"
+                className="w-full px-4 py-3 rounded-2xl themed-input outline-none focus:ring-2 focus:ring-neutral-300"
+                autoFocus
+              />
+              {adminError && (
+                <div className="px-4 py-2 rounded-xl bg-red-900/30 text-red-200 border border-red-500/50 text-sm">
+                  {adminError}
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                className="px-4 py-2 rounded-lg control border hover:bg-surface-muted transition"
+                onClick={() => {
+                  setShowAdminModal(false);
+                  setAdminPassword("");
+                  setAdminError("");
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                className="px-4 py-2 rounded-lg bg-neutral-200 text-neutral-900 hover:bg-gray-400 transition font-medium"
+                onClick={handleAdminAccess}
+              >
+                Access Dashboard
+              </button>
             </div>
           </div>
         </div>

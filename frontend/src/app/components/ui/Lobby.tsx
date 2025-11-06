@@ -51,7 +51,7 @@ export default function Lobby({ rooms, onCreate, onJoin }: LobbyProps) {
               <select
                 id={capId}
                 defaultValue={2}
-                className="w-full px-3 py-2 pr-9 rounded-lg control border appearance-none"
+                className="w-full focus:ring-1 focus:ring-neutral-300 px-3 py-2 pr-9 rounded-lg control border appearance-none"
                 aria-label="Capacity"
               >
                 {Array.from({ length: 11 }, (_, i) => i + 2).map((n) => (
