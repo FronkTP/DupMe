@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { AnimatedBackground } from './components/AnimatedBackground';
 
 const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:6996';
 
@@ -270,8 +271,31 @@ export default function AdminPage() {
   }
 
   return (
-    <main className="min-h-screen p-3 w-full text-foreground flex flex-col">
-      <header className="px-6 py-4 flex items-center justify-between shrink-0">
+    <>
+      {/* Hide the main background image for admin page */}
+      <style jsx global>{`
+        body::before {
+          content: '';
+          position: fixed;
+          inset: 0;
+          background: #1a1a18;
+          z-index: -20;
+        }
+        [aria-hidden="true"] {
+          display: none !important;
+        }
+      `}</style>
+
+      <main className="min-h-screen p-3 w-full text-foreground flex flex-col relative">
+        {/* Animated Background - Maximum visibility */}
+        <AnimatedBackground
+          color="rgba(140, 100, 180, 1)"
+          animation={{ scale: 95, speed: 95 }}
+          noise={{ opacity: 0.5, scale: 2.5 }}
+          className="fixed inset-0 -z-10"
+        />
+
+        <header className="px-6 py-4 flex items-center justify-between shrink-0 relative z-10">
         <div className="flex items-center gap-4">
           <h1 className="text-4xl font-licorice tracking-tight">DupMe</h1>
           <span className="text-muted text-sm">Server Dashboard</span>
@@ -295,56 +319,91 @@ export default function AdminPage() {
         </div>
       </header>
 
-      <section className="flex-1 px-6 pb-6 pt-4 space-y-6 overflow-y-auto">
+      <section className="flex-1 px-6 pb-6 pt-4 overflow-y-auto relative z-10 max-w-7xl mx-auto">
         {/* Messages */}
         {actionMessage && (
-          <div className="p-4 rounded-xl bg-green-900/30 text-green-200 border border-green-500/50">{actionMessage}</div>
+          <div className="mb-4 p-4 rounded-2xl bg-green-500/10 text-green-200 border border-green-500/30 backdrop-blur-xl">{actionMessage}</div>
         )}
         {error && (
-          <div className="p-4 rounded-xl bg-red-900/30 text-red-200 border border-red-500/50">{error}</div>
+          <div className="mb-4 p-4 rounded-2xl bg-red-500/10 text-red-200 border border-red-500/30 backdrop-blur-xl">{error}</div>
         )}
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="p-5 rounded-2xl border border-theme bg-surface backdrop-blur-xl" style={{ boxShadow: 'var(--elev-shadow)' }}>
-            <div className="text-sm text-muted mb-1">Players Online</div>
-            <div className="text-4xl font-bold">{stats?.players || 0}</div>
+        {/* Bento Grid Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 auto-rows-auto min-h-[calc(100vh-10rem)]">
+          {/* Stats - 4 cards in top row */}
+          <div className="lg:col-span-3 p-5 rounded-3xl border border-white/10 bg-black/20 backdrop-blur-2xl">
+            <div className="text-xs text-muted mb-2 uppercase tracking-wide">Players Online</div>
+            <div className="text-5xl font-bold">{stats?.players || 0}</div>
           </div>
-          <div className="p-5 rounded-2xl border border-theme bg-surface backdrop-blur-xl" style={{ boxShadow: 'var(--elev-shadow)' }}>
-            <div className="text-sm text-muted mb-1">Total Rooms</div>
-            <div className="text-4xl font-bold">{stats?.rooms || 0}</div>
+          <div className="lg:col-span-3 p-5 rounded-3xl border border-white/10 bg-black/20 backdrop-blur-2xl">
+            <div className="text-xs text-muted mb-2 uppercase tracking-wide">Total Rooms</div>
+            <div className="text-5xl font-bold">{stats?.rooms || 0}</div>
           </div>
-          <div className="p-5 rounded-2xl border border-theme bg-surface backdrop-blur-xl" style={{ boxShadow: 'var(--elev-shadow)' }}>
-            <div className="text-sm text-muted mb-1">Active Games</div>
-            <div className="text-4xl font-bold">{stats?.activeGames || 0}</div>
+          <div className="lg:col-span-3 p-5 rounded-3xl border border-white/10 bg-black/20 backdrop-blur-2xl">
+            <div className="text-xs text-muted mb-2 uppercase tracking-wide">Active Games</div>
+            <div className="text-5xl font-bold">{stats?.activeGames || 0}</div>
           </div>
-          <div className="p-5 rounded-2xl border border-theme bg-surface backdrop-blur-xl" style={{ boxShadow: 'var(--elev-shadow)' }}>
-            <div className="text-sm text-muted mb-1">Server Uptime</div>
-            <div className="text-xl font-bold">{stats ? formatUptime(stats.uptime) : '-'}</div>
+          <div className="lg:col-span-3 p-5 rounded-3xl border border-white/10 bg-black/20 backdrop-blur-2xl">
+            <div className="text-xs text-muted mb-2 uppercase tracking-wide">Server Uptime</div>
+            <div className="text-2xl font-bold">{stats ? formatUptime(stats.uptime) : '-'}</div>
           </div>
-        </div>
 
-        {/* Server Metrics */}
-        <div className="p-5 rounded-2xl border border-theme bg-surface backdrop-blur-xl" style={{ boxShadow: 'var(--elev-shadow)' }}>
-          <h2 className="text-lg font-semibold mb-4">Server Metrics</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
-            <div className="flex flex-col">
-              <span className="text-muted text-xs mb-1">Heap Used</span>
-              <span className="font-mono text-lg">{stats ? formatMemory(stats.memory.heapUsed) : '-'}</span>
-            </div>
-            <div className="flex flex-col">
-              <span className="text-muted text-xs mb-1">Heap Total</span>
-              <span className="font-mono text-lg">{stats ? formatMemory(stats.memory.heapTotal) : '-'}</span>
-            </div>
-            <div className="flex flex-col">
-              <span className="text-muted text-xs mb-1">RSS</span>
-              <span className="font-mono text-lg">{stats ? formatMemory(stats.memory.rss) : '-'}</span>
+          {/* Server Metrics - spans 5 columns */}
+          <div className="lg:col-span-5 p-6 rounded-3xl border border-white/10 bg-black/20 backdrop-blur-2xl">
+            <h2 className="text-sm font-semibold mb-4 uppercase tracking-wide text-muted">Server Metrics</h2>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="flex flex-col">
+                <span className="text-muted text-xs mb-2">Heap Used</span>
+                <span className="font-mono text-2xl font-bold">{stats ? formatMemory(stats.memory.heapUsed) : '-'}</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-muted text-xs mb-2">Heap Total</span>
+                <span className="font-mono text-2xl font-bold">{stats ? formatMemory(stats.memory.heapTotal) : '-'}</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-muted text-xs mb-2">RSS</span>
+                <span className="font-mono text-2xl font-bold">{stats ? formatMemory(stats.memory.rss) : '-'}</span>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Rooms Table */}
-        <div className="p-5 rounded-2xl border border-theme bg-surface backdrop-blur-xl" style={{ boxShadow: 'var(--elev-shadow)' }}>
+          {/* Database Stats - spans 7 columns */}
+          <div className="lg:col-span-7 p-6 rounded-3xl border border-white/10 bg-black/20 backdrop-blur-2xl">
+            <h2 className="text-sm font-semibold mb-4 uppercase tracking-wide text-muted">Database Statistics</h2>
+            {dbStats && dbStats.enabled ? (
+              <>
+                <div className="grid grid-cols-2 gap-6 mb-6">
+                  <div className="flex flex-col">
+                    <span className="text-muted text-xs mb-2">Total Users</span>
+                    <span className="text-4xl font-bold">{dbStats.totalUsers}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-muted text-xs mb-2">Total Game Results</span>
+                    <span className="text-4xl font-bold">{dbStats.totalResults}</span>
+                  </div>
+                </div>
+                {mode === 'full' && (
+                  <div className="mt-4 p-4 border border-red-500/30 rounded-2xl bg-red-500/10 backdrop-blur-xl">
+                    <h3 className="text-xs font-semibold text-red-400 mb-3 uppercase tracking-wide">Danger Zone</h3>
+                    <button
+                      onClick={clearLeaderboard}
+                      className="px-4 py-2 rounded-xl bg-red-600/80 text-white hover:bg-red-600 transition font-medium text-sm"
+                    >
+                      Clear All Leaderboard Data
+                    </button>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="text-muted text-sm p-8 text-center">
+                <p className="mb-2">Database not configured</p>
+                <p className="text-xs">Connect a PostgreSQL database to enable leaderboard tracking</p>
+              </div>
+            )}
+          </div>
+
+          {/* Active Rooms - spans 7 columns */}
+          <div className="lg:col-span-7 p-6 rounded-3xl border border-white/10 bg-black/20 backdrop-blur-2xl">
           <h2 className="text-lg font-semibold mb-4">Active Rooms ({rooms.length})</h2>
           {rooms.length === 0 ? (
             <div className="text-muted text-sm p-4 text-center">No active rooms</div>
@@ -407,76 +466,50 @@ export default function AdminPage() {
           )}
         </div>
 
-        {/* Players Table */}
-        <div className="p-5 rounded-2xl border border-theme bg-surface backdrop-blur-xl" style={{ boxShadow: 'var(--elev-shadow)' }}>
-          <h2 className="text-lg font-semibold mb-4">Connected Players ({players.length})</h2>
-          {players.length === 0 ? (
-            <div className="text-muted text-sm p-4 text-center">No players online</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-theme">
-                    <th className="text-left py-3 text-muted font-medium">Nickname</th>
-                    <th className="text-left py-3 text-muted font-medium">Score</th>
-                    <th className="text-left py-3 text-muted font-medium">Room</th>
-                    <th className="text-left py-3 text-muted font-medium">Socket ID</th>
-                    {mode === 'full' && <th className="text-left py-3 text-muted font-medium">Actions</th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {players.map((player) => (
-                    <tr key={player.socketId} className="border-b border-theme/50 hover:bg-surface-muted/50 transition">
-                      <td className="py-3">{player.nickname}</td>
-                      <td className="py-3">{player.score}%</td>
-                      <td className="py-3 font-mono text-xs text-muted">{player.room || '-'}</td>
-                      <td className="py-3 font-mono text-xs text-muted">{player.socketId.slice(0, 10)}...</td>
-                      {mode === 'full' && (
-                        <td className="py-3">
-                          <button
-                            onClick={() => kickPlayer(player.socketId)}
-                            className="px-3 py-1.5 text-xs rounded-lg bg-red-800 text-white hover:bg-red-700 transition"
-                          >
-                            Kick
-                          </button>
-                        </td>
-                      )}
+          {/* Connected Players - spans 5 columns */}
+          <div className="lg:col-span-5 p-6 rounded-3xl border border-white/10 bg-black/20 backdrop-blur-2xl">
+            <h2 className="text-sm font-semibold mb-4 uppercase tracking-wide text-muted">Connected Players ({players.length})</h2>
+            {players.length === 0 ? (
+              <div className="text-muted text-sm p-8 text-center">No players online</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-white/10">
+                      <th className="text-left py-3 text-muted font-medium text-xs">Nickname</th>
+                      <th className="text-left py-3 text-muted font-medium text-xs">Score</th>
+                      <th className="text-left py-3 text-muted font-medium text-xs">Room</th>
+                      <th className="text-left py-3 text-muted font-medium text-xs">Socket ID</th>
+                      {mode === 'full' && <th className="text-left py-3 text-muted font-medium text-xs">Actions</th>}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-        {/* Database Stats */}
-        {dbStats && dbStats.enabled && (
-          <div className="p-5 rounded-2xl border border-theme bg-surface backdrop-blur-xl" style={{ boxShadow: 'var(--elev-shadow)' }}>
-            <h2 className="text-lg font-semibold mb-4">Database Statistics</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-              <div className="flex flex-col">
-                <span className="text-muted text-xs mb-1">Total Users</span>
-                <span className="text-2xl font-bold">{dbStats.totalUsers}</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-muted text-xs mb-1">Total Game Results</span>
-                <span className="text-2xl font-bold">{dbStats.totalResults}</span>
-              </div>
-            </div>
-            {mode === 'full' && (
-              <div className="mt-6 p-4 border border-red-500/50 rounded-xl bg-red-900/20">
-                <h3 className="text-sm font-semibold text-red-400 mb-3">Danger Zone</h3>
-                <button
-                  onClick={clearLeaderboard}
-                  className="px-4 py-2 rounded-lg bg-red-800 text-white hover:bg-red-700 transition font-medium"
-                >
-                  Clear All Leaderboard Data
-                </button>
+                  </thead>
+                  <tbody>
+                    {players.map((player) => (
+                      <tr key={player.socketId} className="border-b border-white/5 hover:bg-white/5 transition">
+                        <td className="py-3">{player.nickname}</td>
+                        <td className="py-3">{player.score}%</td>
+                        <td className="py-3 font-mono text-xs text-muted">{player.room || '-'}</td>
+                        <td className="py-3 font-mono text-xs text-muted">{player.socketId.slice(0, 10)}...</td>
+                        {mode === 'full' && (
+                          <td className="py-3">
+                            <button
+                              onClick={() => kickPlayer(player.socketId)}
+                              className="px-3 py-1.5 text-xs rounded-xl bg-red-600/80 text-white hover:bg-red-600 transition"
+                            >
+                              Kick
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
-        )}
+        </div>
       </section>
     </main>
+    </>
   );
 }
