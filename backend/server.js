@@ -320,6 +320,123 @@ function leaveRoom(socket) {
   socket.emit('SERVER:LEFT_ROOM');
 }
 
+// add near top with other helpers
+function generateAiPattern(len = 6) {
+  const NOTES = ['C','D','E','F','G','A','B'];
+  const pattern = [];
+  for (let i = 0; i < Math.max(1, Math.min(len, 10)); i++) {
+    pattern.push(NOTES[Math.floor(Math.random() * NOTES.length)]);
+  }
+  return pattern;
+}
+
+// when you start a round for a room, if room.mode === 'ai' use this flow
+function startAiRound(io, room) {
+  const noteMs = 500;
+  const gapMs = 150;
+  const seq = generateAiPattern(6);
+  const playbackDuration = seq.length * (noteMs + gapMs);
+
+  // store pattern & state on room.game
+  room.game = room.game || {};
+  room.game.pattern = seq;
+  room.game.submissions = {}; // socketId -> array of notes
+  room.game.results = []; // results to emit at end
+
+  // emit ai playback phase with sequence & timing
+  io.to(room.id).emit('SERVER:PHASE', {
+    phase: 'ai',
+    sequence: seq,
+    noteMs,
+    gapMs,
+    endsAt: Date.now() + playbackDuration
+  });
+
+  // after playback, move to replicate phase for players to submit
+  setTimeout(() => {
+    const replicateDuration = Math.max(5000, seq.length * 1200); // allow some time to play back
+    io.to(room.id).emit('SERVER:PHASE', {
+      phase: 'replicate',
+      endsAt: Date.now() + replicateDuration
+    });
+    // schedule finalization if players don't finish before timeout
+    setTimeout(() => finalizeAiRound(io, room), replicateDuration + 50);
+  }, playbackDuration + 50);
+}
+
+function finalizeAiRound(io, room) {
+  const seq = room.game?.pattern || [];
+  const players = Object.keys(room.players || {});
+  const results = [];
+
+  for (const pid of players) {
+    const sub = (room.game.submissions && room.game.submissions[pid]) || [];
+    // compute score as percentage of correct items in order
+    let correct = 0;
+    for (let i = 0; i < seq.length; i++) {
+      if (sub[i] && sub[i] === seq[i]) correct++;
+    }
+    const percent = seq.length ? Math.round((correct / seq.length) * 100) : 0;
+    // update stored player score if you want
+    if (room.players[pid]) room.players[pid].score = percent;
+    results.push({ id: pid, nickname: room.players[pid]?.nickname ?? null, score: percent });
+  }
+
+  room.game.results = results;
+  // broadcast ended with results
+  io.to(room.id).emit('SERVER:PHASE', { phase: 'ended', results });
+}
+
+// handle client submit note (add/merge into your socket handlers)
+io.on('connection', (socket) => {
+  // ...existing handlers...
+
+  socket.on('CLIENT:SUBMIT_NOTE', (note) => {
+    try {
+      const rid = socket.roomId; // adapt to how you track socket->room mapping in your server
+      if (!rid) return;
+      const room = rooms[rid];
+      if (!room || !room.game || !Array.isArray(room.game.pattern)) return;
+
+      room.game.submissions = room.game.submissions || {};
+      room.game.submissions[socket.id] = room.game.submissions[socket.id] || [];
+      room.game.submissions[socket.id].push(note);
+
+      // if player finished the pattern, compute their score now
+      const seqLen = room.game.pattern.length;
+      if (room.game.submissions[socket.id].length >= seqLen) {
+        const sub = room.game.submissions[socket.id];
+        let correct = 0;
+        for (let i = 0; i < seqLen; i++) {
+          if (sub[i] === room.game.pattern[i]) correct++;
+        }
+        const percent = seqLen ? Math.round((correct / seqLen) * 100) : 0;
+        // update room player score state and results
+        if (room.players[socket.id]) room.players[socket.id].score = percent;
+        // optionally collect into room.game.results
+        room.game.results = room.game.results || [];
+        // replace or add result for this player
+        room.game.results = room.game.results.filter(r => r.id !== socket.id);
+        room.game.results.push({ id: socket.id, nickname: room.players[socket.id]?.nickname ?? null, score: percent });
+
+        // if all players finished, finalize now
+        const allPlayers = Object.keys(room.players || {});
+        const finished = allPlayers.every(pid => (room.game.submissions && room.game.submissions[pid] && room.game.submissions[pid].length >= seqLen));
+        if (finished) {
+          finalizeAiRound(io, room);
+        } else {
+          // send updated partial result(s) if desired
+          io.to(room.id).emit('SERVER:PLAYER_RESULT', { id: socket.id, score: percent });
+        }
+      }
+    } catch (e) {
+      console.error('SUBMIT_NOTE error', e);
+    }
+  });
+
+  // ...existing handlers...
+});
+
 // (Phase management moved to game.js)
 
 server.listen(PORT, () => {

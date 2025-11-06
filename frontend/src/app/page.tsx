@@ -96,6 +96,7 @@ export default function Home() {
   const [highlightColor, setHighlightColor] = useState<string | null>(null);
   const clickGlowTimeoutRef = useRef<number | null>(null);
   const replicateLocalIndexRef = useRef<number>(0);
+  const replicateLocalCorrectRef = useRef<number>(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [timerProgress, setTimerProgress] = useState<number>(0);
   type LeaderRow = { user_id: string; nickname: string; best: number };
@@ -108,6 +109,8 @@ export default function Home() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const [volume, setVolume] = useState(0.5);
+  const [localAiPractice, setLocalAiPractice] = useState(false);
+  const [localAiScore, setLocalAiScore] = useState(0);
 
 
   // Theme state (synced with <html data-theme> and localStorage)
@@ -224,39 +227,21 @@ export default function Home() {
       if (p?.mode) setRoomMode(p.mode);
     });
     newSocket.on('SERVER:PHASE', (p: PhasePayload) => {
+      console.debug('[SOCKET] SERVER:PHASE', p);
       setPhase(p?.phase ?? null);
       setCreatorId(p?.creatorId ?? null);
       if (p?.mode) setRoomMode(p.mode || 'classic');
-      if (p?.phase === 'practice') {
-        setRoomBanner('Practice Mode: Test the keyboard sounds');
+      if (p?.phase === 'practice' || p?.phase === 'ai') {
+        setRoomBanner(p?.phase === 'ai' ? 'AI Practice Mode: Test the keyboard sounds' : 'Practice Mode: Test the keyboard sounds');
         setReplicatePattern([]);
         setResults(null);
-        // Ensure audio is ready for practice
         void ensureAudio();
       }
-      if (p?.phase === 'ai') {
-        setRoomBanner('Ai Practice Mode: Practice with AI-generated melodies');
-        setReplicatePattern([]);
-        setResults(null);
-        // Ensure audio is ready for practice
-        void ensureAudio();
+      // if server sends results with ended phase, update results state so RoomView shows them
+      if (p?.phase === 'ended' && p?.results) {
+        setResults(p.results);
+        setRoomBanner('Round ended');
       }
-      if (p?.phase === 'demo') {
-        setRoomBanner('Sound demo: listen to each note');
-        setDemoSequence(p?.sequence || ['C','D','E','F','G','A','B']);
-        if (typeof p?.noteMs === 'number') setDemoNoteMs(p.noteMs);
-        if (typeof p?.gapMs === 'number') setDemoGapMs(p.gapMs);
-        // during demo we don't set replicatePattern; visuals will use demoSequence
-        setReplicatePattern([]);
-        setResults(null);
-      }
-      if (p?.phase === 'playback') {
-        setRoomBanner('Listening: melody is playing');
-        if (typeof p?.noteMs === 'number') setDemoNoteMs(p.noteMs);
-        if (typeof p?.gapMs === 'number') setDemoGapMs(p.gapMs);
-      }
-      if (p?.phase === 'replicate') setRoomBanner('Replicate phase: match the pattern');
-      if (p?.phase === 'ended') setRoomBanner('Round ended');
       // For playback: keep the sequence as-is so playback plays forward visuals/sounds
       if (p?.phase === 'playback') setReplicatePattern(p?.pattern || []);
       // For replicate: if mode is reverse, set the expected sequence to the reversed pattern
@@ -433,53 +418,130 @@ export default function Home() {
   const canPlay = isPracticeActive ? true : phase === 'create' ? isCreator : phase === 'replicate' ? !isCreator : false;
 
 
+  // simple AI pattern generator (client-side fallback)
+  const generateAiPattern = (len = 6) => {
+    const NOTES = ['C','D','E','F','G','A','B'];
+    const out: string[] = [];
+    for (let i = 0; i < Math.max(1, Math.min(len, 10)); i++) {
+      out.push(NOTES[Math.floor(Math.random() * NOTES.length)]);
+    }
+    return out;
+  };
+
+  // Auto-play AI pattern then transition to local replicate so user can match it
+  useEffect(() => {
+    if (phase !== 'ai') { return; }
+    if (!audioReady) return;
+    // choose sequence: prefer server-provided replicatePattern, fallback to generated
+    const seq = (replicatePattern && replicatePattern.length) ? replicatePattern : generateAiPattern(6);
+    // store the sequence we'll ask the user to replicate
+    setReplicatePattern(seq);
+    // reset any local replicate progress
+    replicateLocalIndexRef.current = 0;
+
+    // Play the audio sequence
+    playSequence(seq, { noteMs: demoNoteMs, gapMs: demoGapMs, volume });
+
+    // schedule highlights (unless perfect mode which is audio-only)
+    const timeouts: number[] = [];
+    if (roomMode !== 'perfect') {
+      for (let i = 0; i < seq.length; i++) {
+        const id = window.setTimeout(() => {
+          const idx = ['C','D','E','F','G','A','B'].indexOf(seq[i] || '');
+          setHighlightIndex(idx);
+          setHighlightColor(null);
+        }, i * (demoNoteMs + demoGapMs));
+        timeouts.push(id);
+      }
+    }
+
+    // after playback ends, transition to replicate so the existing replicate logic runs.
+    const totalMs = seq.length * (demoNoteMs + demoGapMs);
+    const finishId = window.setTimeout(() => {
+      // Enter replicate so the existing replicate logic runs.
+      // Mark this as a local AI practice session so we score locally.
+      setPhase('replicate');
+      setHighlightIndex(-1);
+      setHighlightColor(null);
+      replicateLocalIndexRef.current = 0;
+      replicateLocalCorrectRef.current = 0;
+      setLocalAiScore(0);
+      setLocalAiPractice(true);
+    }, totalMs);
+    timeouts.push(finishId);
+
+    return () => { timeouts.forEach((id) => window.clearTimeout(id)); };
+  }, [phase, audioReady, replicatePattern, demoNoteMs, demoGapMs, roomMode, volume]);
+
+  // Manual continue for AI practice
+  const continueAiPractice = useCallback(() => {
+    setResults(null);
+    setReplicatePattern([]);
+    setRoomBanner('AI Practice: New sequence…');
+    setPhase('ai');
+  }, []);
+
   // Send a note to the server; server decides how to route it
   const handlePianoKeyClick = useCallback((note: string) => {
     if (!socket) return;
     const idx = ['C','D','E','F','G','A','B'].indexOf((note || '').toUpperCase());
-    
-    // Practice mode: just play sound, no game logic
-    if (phase === 'practice' || roomMode === 'practice' || phase === 'ai' || roomMode === 'ai') {
+
+    // Practice mode: just play sound locally, no game logic submit
+    const inPurePractice = (phase === 'practice' || roomMode === 'practice');
+    const inAiPlayback = (phase === 'ai') || (roomMode === 'ai' && phase !== 'replicate');
+
+    if (inPurePractice || inAiPlayback) {
+      // local visual feedback
       if (idx >= 0) {
         setHighlightIndex(idx);
         setHighlightColor(null);
         if (clickGlowTimeoutRef.current) window.clearTimeout(clickGlowTimeoutRef.current);
         clickGlowTimeoutRef.current = window.setTimeout(() => { setHighlightIndex(-1); setHighlightColor(null); }, 350);
       }
-      if (audioReady) playSequence([note], { noteMs: 400, gapMs: 0 });
-      return; // Don't send to server in practice mode
+      // play local sound if audio unlocked
+      if (audioReady) playSequence([note], { noteMs: 400, gapMs: 0, volume });
+      return; // do not send to server in practice / ai playback
     }
-    
-    if (!isCreator && phase === 'replicate') {
-      const pattern = replicatePattern || [];
-      const localIdx = replicateLocalIndexRef.current;
-      if (localIdx < pattern.length) {
-        const expected = (pattern[localIdx] || '').toUpperCase();
-        const isCorrect = (note || '').toUpperCase() === expected;
-        if (idx >= 0) {
-          setHighlightIndex(idx);
-          setHighlightColor(isCorrect ? '#22C55E' : '#EF4444');
-          if (clickGlowTimeoutRef.current) window.clearTimeout(clickGlowTimeoutRef.current);
-          clickGlowTimeoutRef.current = window.setTimeout(() => { setHighlightIndex(-1); setHighlightColor(null); }, 200);
-        }
-        if (audioReady) playBeep(isCorrect ? 880 : 220, 200, volume);
-        replicateLocalIndexRef.current = localIdx + 1;
-      }
-    } else {
-      // Standardize creator create-phase feedback to 400ms sound + glow
-      const glowMs = (isCreator && phase === 'create') ? 350 : 200;
+
+    // Local AI practice replicate scoring (do not emit to server)
+    if (localAiPractice && phase === 'replicate') {
+      const expected = replicatePattern?.[replicateLocalIndexRef.current] ?? null;
+      const correctNow = expected !== null && expected === note;
       if (idx >= 0) {
         setHighlightIndex(idx);
-        setHighlightColor(null);
+        setHighlightColor(correctNow ? 'green' : 'red');
         if (clickGlowTimeoutRef.current) window.clearTimeout(clickGlowTimeoutRef.current);
-        clickGlowTimeoutRef.current = window.setTimeout(() => { setHighlightIndex(-1); setHighlightColor(null); }, glowMs);
+        clickGlowTimeoutRef.current = window.setTimeout(() => { setHighlightIndex(-1); setHighlightColor(null); }, 350);
       }
-      if (isCreator && phase === 'create' && audioReady) {
-        playSequence([note], { noteMs: 400, gapMs: 0, volume });
+      if (audioReady) playSequence([note], { noteMs: 400, gapMs: 0, volume });
+      if (correctNow) {
+        replicateLocalCorrectRef.current += 1;
+        setLocalAiScore(replicateLocalCorrectRef.current);
       }
+      replicateLocalIndexRef.current += 1;
+      // finished sequence
+      if (replicateLocalIndexRef.current >= (replicatePattern?.length || 0)) {
+        const total = replicatePattern?.length || 0;
+        const correct = replicateLocalCorrectRef.current;
+        const percent = total > 0 ? Math.round((correct / total) * 100) : 0;
+        setLocalAiPractice(false);
+        setResults([{ id: myId ?? 'local', nickname: nickname || null, score: percent }]);
+        setRoomBanner(`AI Practice finished — score ${percent}%`);
+        setPhase('ended');
+      }
+      return;
     }
+
+    // normal game submission: give immediate feedback and emit
+    if (idx >= 0) {
+      setHighlightIndex(idx);
+      setHighlightColor(null);
+      if (clickGlowTimeoutRef.current) window.clearTimeout(clickGlowTimeoutRef.current);
+      clickGlowTimeoutRef.current = window.setTimeout(() => { setHighlightIndex(-1); setHighlightColor(null); }, 350);
+    }
+    if (audioReady) playSequence([note], { noteMs: 400, gapMs: 0, volume });
     socket.emit('CLIENT:SUBMIT_NOTE', note);
-  }, [socket, isCreator, phase, audioReady, replicatePattern, roomMode, volume]);
+  }, [socket, phase, audioReady, roomMode, volume, localAiPractice, replicatePattern, myId, nickname]);
 
   // Save nickname once per connection
   const submitNickname = useCallback(async () => {
@@ -566,8 +628,8 @@ export default function Home() {
         return;
       }
       if (!hasNick) return;
-      // permit key input during create/replicate and both practice modes (including ai)
-      if (!(phase === 'create' || phase === 'replicate' || phase === 'practice' || phase === 'ai')) return;
+      // permit key input during create/replicate and practice; DO NOT accept input while AI is playing back (phase === 'ai')
+      if (!(phase === 'create' || phase === 'replicate' || phase === 'practice')) return;
       if (!canPlay) return;
       const note = KEY_TO_NOTE[key];
       if (!note) return;
@@ -600,6 +662,7 @@ export default function Home() {
             <select
               className="px-2 py-1 rounded control border"
               value={soundPack}
+              aria-label="Tone"
               onChange={(e) => { const v = e.target.value as 'soft'|'classic'|'retro'; setSoundPack(v); setSoundPackState(v); }}
             >
               <option value="soft">Soft</option>
@@ -610,7 +673,6 @@ export default function Home() {
           <button
             type="button"
             aria-label="Toggle theme"
-            aria-pressed={theme === 'light'}
             onClick={toggleTheme}
             className="px-2 py-1 rounded inline-flex items-center gap-1 control border"
             title={theme === 'light' ? 'Switch to dark' : 'Switch to light'}
@@ -702,6 +764,7 @@ export default function Home() {
                             type="file"
                             accept="image/*"
                             className="hidden"
+                            aria-label="Upload avatar"
                             onChange={async (e: ChangeEvent<HTMLInputElement>) => {
                               const file = e.target.files?.[0];
                               if (!file) { return; }
@@ -725,7 +788,7 @@ export default function Home() {
                     </div>
                     {/* removed duplicate label */}
                   </div>
-                  <button onClick={submitNickname} className="p-4 rounded-full bg-neutral-200 text-neutral-900 hover:bg-gray-400 transition"><CirclePlay size={18} /></button>
+                  <button aria-label="Start" onClick={submitNickname} className="p-4 rounded-full bg-neutral-200 text-neutral-900 hover:bg-gray-400 transition"><CirclePlay size={18} /></button>
                 </div>
               </div>
               {/* carousel picker is inline in the preview; no separate grid here */}
@@ -774,6 +837,7 @@ export default function Home() {
                 onLeave={leaveRoom}
                 onReady={async (ready) => { await ensureAudio(); socket?.emit('ROOMS:READY', ready); }}
                 onKeyClick={handlePianoKeyClick}
+                onContinue={continueAiPractice}
                 playersState={gameState?.players || {}}
               />
               {phase === 'game_over' && (lbAll.length > 0 || lbWeek.length > 0) && (

@@ -23,9 +23,10 @@ type RoomViewProps = {
   onReady: (ready: boolean) => void;
   onKeyClick: (note: string) => void;
   playersState?: Record<string, { id: string; nickname?: string | null; score: number; avatar?: string | null }>;
+  onContinue?: () => void;
 };
 
-export default function RoomView({ room, phase, banner, canPlay, replicatePattern, results, isCreator, highlightIndex, highlightColor, remainingSeconds, progress, onLeave, onReady, onKeyClick, playersState }: RoomViewProps) {
+export default function RoomView({ room, phase, banner, canPlay, replicatePattern, results, isCreator, highlightIndex, highlightColor, remainingSeconds, progress, onLeave, onReady, onKeyClick, playersState, onContinue }: RoomViewProps) {
   const labelFor = (n: string) => {
     const u = (n || '').toUpperCase();
     const octave = '4';
@@ -110,16 +111,22 @@ export default function RoomView({ room, phase, banner, canPlay, replicatePatter
         </div>
       )}
 
-      {(phase === 'practice' || room.mode === 'practice' || phase === 'ai' || room.mode === 'ai') && (
+      {((phase === 'practice' || phase === 'ai' || room.mode === 'practice' || room.mode === 'ai') && phase !== 'replicate') && (
         <div className="mt-2">
           <div className="mb-3 p-3 bg-blue-900/30 rounded-lg text-sm text-gray-200">
-            Practice Mode: Click the keys to test sounds. No game logic, just practice!
+            Practice / AI Playback: Click the keys to test sounds (or listen while AI plays). During replicate the bottom keyboard is used to submit notes.
           </div>
           <Piano onKeyClick={onKeyClick} disabled={false} highlightIndex={highlightIndex} highlightColor={highlightColor} />
         </div>
       )}
 
-      {(phase === 'demo' || phase === 'create' || phase === 'replicate' || phase === 'ended') && room.mode !== 'practice' && (
+      {(phase === 'demo' || phase === 'create' || phase === 'ended') && room.mode !== 'practice' && room.mode !== 'ai' && (
+        <div className="mt-2">
+          <Piano onKeyClick={onKeyClick} disabled={!canPlay} highlightIndex={highlightIndex} highlightColor={highlightColor} />
+        </div>
+      )}
+
+      {phase === 'replicate' && (
         <div className="mt-2">
           <Piano onKeyClick={onKeyClick} disabled={!canPlay} highlightIndex={highlightIndex} highlightColor={highlightColor} />
         </div>
@@ -163,7 +170,13 @@ export default function RoomView({ room, phase, banner, canPlay, replicatePatter
               );
             })}
           </ul>
-          <div className="mt-3 text-sm text-muted">Click Ready to start another round.</div>
+          {room.mode === 'ai' ? (
+            <div className="mt-3 flex justify-end">
+              <button className="px-3 py-1.5 rounded bg-neutral-200 text-neutral-900 hover:bg-gray-400 transition" onClick={() => onContinue && onContinue()}>Next sequence</button>
+            </div>
+          ) : (
+            <div className="mt-3 text-sm text-muted">Click Ready to start another round.</div>
+          )}
         </div>
       )}
 
