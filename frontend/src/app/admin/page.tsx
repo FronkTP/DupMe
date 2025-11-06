@@ -281,6 +281,13 @@ export default function AdminPage() {
         [aria-hidden="true"] {
           display: none !important;
         }
+        /* Force light text colors on admin page regardless of theme */
+        main {
+          --foreground: rgb(229, 229, 229);
+          --text-primary: rgb(229, 229, 229);
+          --text-muted: rgb(163, 163, 163);
+          color: rgb(229, 229, 229);
+        }
       `}</style>
 
       <main className="min-h-screen p-3 w-full text-foreground flex flex-col relative">

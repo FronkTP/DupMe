@@ -57,7 +57,7 @@ type GameState = {
   currentRound: number;
 };
 type RoomListItem = { id: string; name: string; capacity: number; count: number };
-type RoomSnapshot = { id: string; name: string; capacity: number; players: Array<{ id: string; nickname: string | null; score: number; attempts?: number; rejected?: number }>; ready?: string[]; mode?: 'classic'|'perfect'|'reverse'|'practice' };
+type RoomSnapshot = { id: string; name: string; capacity: number; players: Array<{ id: string; nickname: string | null; score: number; attempts?: number; rejected?: number }>; ready?: string[]; mode?: 'classic'|'perfect'|'reverse'|'practice'|'ai' };
 
 export default function Home() {
   // Connection + identity
@@ -78,10 +78,10 @@ export default function Home() {
 
   // In-room status
   const [roomBanner, setRoomBanner] = useState<string>("");
-  const [phase, setPhase] = useState<'idle'|'demo'|'create'|'playback'|'replicate'|'ended'|'game_over'|'practice'|'round_summary'|null>(null);
+  const [phase, setPhase] = useState<'idle'|'demo'|'create'|'playback'|'replicate'|'ended'|'game_over'|'practice'|'round_summary'|'ai'|null>(null);
   const [creatorId, setCreatorId] = useState<string | null>(null);
   const [replicatePattern, setReplicatePattern] = useState<string[]>([]);
-  const [roomMode, setRoomMode] = useState<'classic'|'perfect'|'reverse'|'practice'>('classic');
+  const [roomMode, setRoomMode] = useState<'classic'|'perfect'|'reverse'|'practice'|'ai'>('classic');
   const [results, setResults] = useState<Array<{ id: string; nickname: string | null; score: number }> | null>(null);
   const [winnerOverlayOpen, setWinnerOverlayOpen] = useState<boolean>(false);
   const [roundSummary, setRoundSummary] = useState<{ roundCompleted: number; totalRounds: number; results: Array<{ id: string; nickname: string | null; score: number }> } | null>(null);

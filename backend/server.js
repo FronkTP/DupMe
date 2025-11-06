@@ -3,7 +3,7 @@ import { Server } from 'socket.io';
 import cors from 'cors';
 import express from 'express';
 import { toPercent } from './utils.js';
-import { rooms, listRooms, createRoom, getRoomSnapshot, CREATE_MAX_NOTES, isPracticeRoom } from './rooms.js';
+import { rooms, listRooms, createRoom, getRoomSnapshot, CREATE_MAX_NOTES, isPracticeRoom, isAiPracticeRoom } from './rooms.js';
 import { makeGameApi } from './game.js';
 import pkg from 'pg';
 const { Pool } = pkg;
@@ -255,6 +255,52 @@ io.on('connection', (socket) => {
     const room = roomId ? rooms[roomId] : null;
     // Practice mode rooms don't process notes - they're handled client-side only
     if (room && room.mode === 'practice') return;
+
+    // Handle AI mode note submissions
+    if (room && room.mode === 'ai' && room.game && room.game.phase === 'replicate') {
+      const seq = room.game.pattern || [];
+      room.game.submissions = room.game.submissions || {};
+      room.game.submissions[socket.id] = room.game.submissions[socket.id] || [];
+      room.game.submissions[socket.id].push(note);
+
+      const sub = room.game.submissions[socket.id];
+      const seqLen = seq.length;
+
+      // If player finished the pattern, compute their score now
+      if (sub.length >= seqLen) {
+        let correct = 0;
+        for (let i = 0; i < seqLen; i++) {
+          if (sub[i] === seq[i]) correct++;
+        }
+        const percent = seqLen ? Math.round((correct / seqLen) * 100) : 0;
+
+        // Update player score in gameState
+        if (gameState.players[socket.id]) gameState.players[socket.id].score = percent;
+
+        // Update or add result for this player
+        room.game.results = room.game.results || [];
+        room.game.results = room.game.results.filter(r => r.id !== socket.id);
+        room.game.results.push({
+          id: socket.id,
+          nickname: gameState.players[socket.id]?.nickname ?? null,
+          score: percent
+        });
+
+        // Broadcast updated score
+        broadcastGameState();
+
+        // If all players finished, finalize now
+        const allPlayers = Object.keys(room.players || {});
+        const finished = allPlayers.every(pid =>
+          (room.game.submissions[pid] && room.game.submissions[pid].length >= seqLen)
+        );
+        if (finished) {
+          finalizeAiRound(roomId);
+        }
+      }
+      return;
+    }
+
     if (room && room.game) {
       if (room.game.phase === 'create' && room.game.creatorId === socket.id) {
         // Enforce hard cap on pattern length
@@ -333,8 +379,8 @@ io.on('connection', (socket) => {
     if (!roomId) return;
     const room = rooms[roomId];
     if (!room) return;
-    // Practice mode rooms don't use ready/game start logic
-    if (room.mode === 'practice') return;
+    // Practice and AI mode rooms don't use ready/game start logic
+    if (room.mode === 'practice' || room.mode === 'ai') return;
     room.ready = room.ready || {};
     if (isReady) room.ready[socket.id] = true; else delete room.ready[socket.id];
     broadcastRoom(roomId);
@@ -346,6 +392,91 @@ io.on('connection', (socket) => {
     }
   });
 });
+
+// AI Mode Helper Functions
+function generateAiPattern(len = 6) {
+  const NOTES = ['C','D','E','F','G','A','B'];
+  const pattern = [];
+  for (let i = 0; i < Math.max(1, Math.min(len, 10)); i++) {
+    pattern.push(NOTES[Math.floor(Math.random() * NOTES.length)]);
+  }
+  return pattern;
+}
+
+function startAiRound(roomId) {
+  const room = rooms[roomId];
+  if (!room) return;
+
+  const noteMs = 500;
+  const gapMs = 150;
+  const seq = generateAiPattern(6);
+  const playbackDuration = seq.length * (noteMs + gapMs);
+
+  // Store pattern & state on room.game
+  room.game = room.game || {};
+  room.game.pattern = seq;
+  room.game.submissions = {}; // socketId -> array of notes
+  room.game.results = []; // results to emit at end
+
+  // Emit AI playback phase with sequence & timing
+  io.to(roomId).emit('SERVER:PHASE', {
+    phase: 'ai',
+    sequence: seq,
+    noteMs,
+    gapMs,
+    endsAt: Date.now() + playbackDuration
+  });
+
+  // After playback, move to replicate phase for players to submit
+  setTimeout(() => {
+    const replicateDuration = Math.max(5000, seq.length * 1200);
+    io.to(roomId).emit('SERVER:PHASE', {
+      phase: 'replicate',
+      endsAt: Date.now() + replicateDuration
+    });
+    // Schedule finalization if players don't finish before timeout
+    setTimeout(() => finalizeAiRound(roomId), replicateDuration + 50);
+  }, playbackDuration + 50);
+}
+
+function finalizeAiRound(roomId) {
+  const room = rooms[roomId];
+  if (!room) return;
+
+  const seq = room.game?.pattern || [];
+  const players = Object.keys(room.players || {});
+  const results = [];
+
+  for (const pid of players) {
+    const sub = (room.game?.submissions?.[pid]) || [];
+    // Compute score as percentage of correct items in order
+    let correct = 0;
+    for (let i = 0; i < seq.length; i++) {
+      if (sub[i] && sub[i] === seq[i]) correct++;
+    }
+    const percent = seq.length ? Math.round((correct / seq.length) * 100) : 0;
+
+    // Update player score in gameState
+    const playerState = gameState.players[pid];
+    if (playerState) playerState.score = percent;
+
+    results.push({
+      id: pid,
+      nickname: playerState?.nickname ?? null,
+      score: percent
+    });
+  }
+
+  room.game.results = results;
+  // Broadcast ended with results
+  io.to(roomId).emit('SERVER:PHASE', {
+    phase: 'ended',
+    results
+  });
+
+  // Broadcast updated game state
+  broadcastGameState();
+}
 
 // Helpers for room membership
 function joinRoom(socket, roomId) {
@@ -371,6 +502,10 @@ function joinRoom(socket, roomId) {
   if (isPracticeRoom(roomId)) {
     io.to(roomId).emit('SERVER:PHASE', { roomId, phase: 'practice', mode: 'practice' });
   }
+  // Auto-start AI practice mode when joining an AI practice room
+  if (isAiPracticeRoom(roomId)) {
+    startAiRound(roomId);
+  }
 }
 
 function leaveRoom(socket) {
@@ -395,7 +530,7 @@ function leaveRoom(socket) {
 // (Phase management moved to game.js)
 
 server.listen(PORT, () => {
-  console.log(`🚀 Server is running and listening on port ${PORT}`);
+  console.log(`Server is running and listening on port ${PORT}`);
 });
 
 // Leaderboard API

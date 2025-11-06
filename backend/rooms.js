@@ -18,8 +18,8 @@ export const listRooms = () => Object.values(rooms).map((r) => ({
 export const createRoom = ({ name, capacity, mode, numRounds } = {}) => {
   const id = generateRoomId();
   const cap = Math.max(2, Math.min(12, Number(capacity) || 2));
-  // Accept practice and ai modes, but convert ai to classic for now
-  const m = (mode === 'perfect' || mode === 'reverse' || mode === 'practice') ? mode : 'classic';
+  // Accept practice and ai modes
+  const m = (mode === 'perfect' || mode === 'reverse' || mode === 'practice' || mode === 'ai') ? mode : 'classic';
   // Validate numRounds: 1-5 rounds, default to 1
   const rounds = Math.max(1, Math.min(5, Number(numRounds) || 1));
   rooms[id] = { id, name: String(name || `Room ${id}`), capacity: cap, players: {}, ready: {}, joinOrder: [], mode: m, numRounds: rounds };
@@ -48,5 +48,10 @@ export const isPracticeRoom = (roomId) => {
   return room && room.mode === 'practice';
 };
 
+// Check if a room is in AI practice mode
+export const isAiPracticeRoom = (roomId) => {
+  const room = rooms[roomId];
+  return room && room.mode === 'ai';
+};
 
 

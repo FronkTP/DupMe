@@ -5,11 +5,11 @@ import Piano from "../Piano";
 
 type Player = { id: string; nickname: string | null; score: number; attempts?: number; rejected?: number };
 
-type RoomSnapshot = { id: string; name: string; capacity: number; players: Player[]; ready?: string[]; mode?: 'classic'|'perfect'|'reverse'|'practice' };
+type RoomSnapshot = { id: string; name: string; capacity: number; players: Player[]; ready?: string[]; mode?: 'classic'|'perfect'|'reverse'|'practice'|'ai' };
 
 type RoomViewProps = {
   room: RoomSnapshot;
-  phase: 'idle'|'demo'|'create'|'playback'|'replicate'|'ended'|'game_over'|'practice'|'round_summary'|null;
+  phase: 'idle'|'demo'|'create'|'playback'|'replicate'|'ended'|'game_over'|'practice'|'round_summary'|'ai'|null;
   banner: string;
   canPlay: boolean;
   replicatePattern: string[];
@@ -103,7 +103,7 @@ export default function RoomView({ room, phase, banner, canPlay, replicatePatter
         })}
       </ul>
 
-      {(phase === null || phase === 'idle' || phase === 'game_over') && room.mode !== 'practice' && (
+      {(phase === null || phase === 'idle' || phase === 'game_over') && room.mode !== 'practice' && room.mode !== 'ai' && (
         <div className="flex gap-2">
           <button className="px-3 py-2 bg-green-900 text-white rounded-lg" onClick={() => onReady(true)}>Ready</button>
           <button className="px-3 py-2 bg-neutral-200 text-neutral-900 hover:bg-gray-400 transition rounded-lg" onClick={() => onReady(false)}>Unready</button>
@@ -119,7 +119,16 @@ export default function RoomView({ room, phase, banner, canPlay, replicatePatter
         </div>
       )}
 
-      {(phase === 'demo' || phase === 'create' || phase === 'replicate' || phase === 'ended') && room.mode !== 'practice' && (
+      {(phase === 'ai' || room.mode === 'ai') && (
+        <div className="mt-2">
+          <div className="mb-3 p-3 bg-purple-900/30 rounded-lg text-sm text-gray-200">
+            AI Practice Mode: The AI will generate patterns for you to replicate!
+          </div>
+          <Piano onKeyClick={onKeyClick} disabled={false} highlightIndex={highlightIndex} highlightColor={highlightColor} />
+        </div>
+      )}
+
+      {(phase === 'demo' || phase === 'create' || phase === 'replicate' || phase === 'ended') && room.mode !== 'practice' && room.mode !== 'ai' && (
         <div className="mt-2">
           <Piano onKeyClick={onKeyClick} disabled={!canPlay} highlightIndex={highlightIndex} highlightColor={highlightColor} />
         </div>
