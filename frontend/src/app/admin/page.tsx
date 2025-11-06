@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AnimatedBackground } from './components/AnimatedBackground';
+import { AdminLoadingScreen } from './components/AdminLoadingScreen';
 
 const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:6996';
 
@@ -263,11 +264,7 @@ export default function AdminPage() {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-surface grid place-items-center">
-        <div className="text-text-primary">Loading...</div>
-      </div>
-    );
+    return <AdminLoadingScreen />;
   }
 
   return (
@@ -298,9 +295,9 @@ export default function AdminPage() {
         <header className="px-6 py-4 flex items-center justify-between shrink-0 relative z-10">
         <div className="flex items-center gap-4">
           <h1 className="text-4xl font-licorice tracking-tight">DupMe</h1>
-          <span className="text-muted text-sm">Server Dashboard</span>
+          <span className="text-muted font-ancizar-serif text-sm">Server Dashboard</span>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 font-inter">
           <span className={`px-3 py-1.5 rounded-lg text-xs font-medium border ${
             mode === 'full' ? 'bg-green-900/30 text-green-200 border-green-500/50' : 'bg-blue-900/30 text-blue-200 border-blue-500/50'
           }`}>
@@ -319,7 +316,7 @@ export default function AdminPage() {
         </div>
       </header>
 
-      <section className="flex-1 px-6 pb-6 pt-4 overflow-y-auto relative z-10 max-w-7xl mx-auto">
+      <section className="flex-1 px-6 pb-6 pt-4 overflow-y-auto relative z-10 w-full max-w-7xl mx-auto">
         {/* Messages */}
         {actionMessage && (
           <div className="mb-4 p-4 rounded-2xl bg-green-500/10 text-green-200 border border-green-500/30 backdrop-blur-xl">{actionMessage}</div>
@@ -329,7 +326,7 @@ export default function AdminPage() {
         )}
 
         {/* Bento Grid Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 auto-rows-auto min-h-[calc(100vh-10rem)]">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 auto-rows-auto min-h-[calc(100vh-10rem)] font-ancizar-sans w-full">
           {/* Stats - 4 cards in top row */}
           <div className="lg:col-span-3 p-5 rounded-3xl border border-white/10 bg-black/20 backdrop-blur-2xl">
             <div className="text-xs text-muted mb-2 uppercase tracking-wide">Players Online</div>
@@ -349,7 +346,7 @@ export default function AdminPage() {
           </div>
 
           {/* Server Metrics - spans 5 columns */}
-          <div className="lg:col-span-5 p-6 rounded-3xl border border-white/10 bg-black/20 backdrop-blur-2xl">
+          <div className="lg:col-span-5 p-6 rounded-3xl border border-white/10 bg-black/20 backdrop-blur-2xl font-mono">
             <h2 className="text-sm font-semibold mb-4 uppercase tracking-wide text-muted">Server Metrics</h2>
             <div className="grid grid-cols-3 gap-4">
               <div className="flex flex-col">

@@ -848,7 +848,7 @@ export default function Home() {
         className="fixed bottom-4 left-4 px-3 py-1.5 text-xs opacity-50 hover:opacity-100 transition-opacity rounded control"
         title="Server Management"
       >
-        🔧 Server Management
+        <span className="font-ancizar-serif">Server Management</span>
       </button>
 
       {/* Admin Password Modal */}
