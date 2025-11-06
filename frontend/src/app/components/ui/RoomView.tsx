@@ -9,7 +9,7 @@ type RoomSnapshot = { id: string; name: string; capacity: number; players: Playe
 
 type RoomViewProps = {
   room: RoomSnapshot;
-  phase: 'idle'|'demo'|'create'|'playback'|'replicate'|'ended'|'game_over'|'practice'|null;
+  phase: 'idle'|'demo'|'create'|'playback'|'replicate'|'ended'|'game_over'|'practice'|'round_summary'|null;
   banner: string;
   canPlay: boolean;
   replicatePattern: string[];

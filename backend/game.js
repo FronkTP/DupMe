@@ -22,7 +22,26 @@ export const makeGameApi = ({ getPlayersState, broadcastRoom, broadcastGameState
     order.forEach((sid) => { scores[sid] = 0; attempts[sid] = 0; const p = getPlayersState()[sid]; if (p) p.score = 0; });
     // inherit room mode (default to classic)
     const mode = room.mode || 'classic';
-    room.game = { phase: 'demo', mode, order, roundIndex: 0, creatorId: order[0], pattern: [], submissions: {}, endsAt: Date.now(), scores, attempts, rejected: {}, roundBase: { ...scores }, roundBaseAttempts: { ...attempts } };
+    const numRounds = room.numRounds || 1;
+    const totalTurns = order.length * numRounds;
+    room.game = {
+      phase: 'demo',
+      mode,
+      order,
+      numRounds,
+      currentRound: 1,
+      currentTurn: 0,
+      totalTurns,
+      creatorId: order[0],
+      pattern: [],
+      submissions: {},
+      endsAt: Date.now(),
+      scores,
+      attempts,
+      rejected: {},
+      roundBase: { ...scores },
+      roundBaseAttempts: { ...attempts }
+    };
     // Broadcast zeroed scoreboard immediately so clients don't show stale scores
     broadcastGameState();
     broadcastRoom(roomId);
@@ -36,7 +55,14 @@ export const makeGameApi = ({ getPlayersState, broadcastRoom, broadcastGameState
     room.game.phase = 'create';
     room.game.pattern = [];
     room.game.submissions = {};
-    room.game.creatorId = room.game.order[room.game.roundIndex];
+
+    // Use modulo for wrap-around: supports multi-round games
+    const playerIndex = room.game.currentTurn % room.game.order.length;
+    room.game.creatorId = room.game.order[playerIndex];
+
+    // Calculate current round (1-indexed)
+    room.game.currentRound = Math.floor(room.game.currentTurn / room.game.order.length) + 1;
+
     room.game.endsAt = Date.now() + 10000;
     room.game.roundBase = { ...(room.game.scores || {}) };
     room.game.roundBaseAttempts = { ...(room.game.attempts || {}) };
@@ -46,7 +72,17 @@ export const makeGameApi = ({ getPlayersState, broadcastRoom, broadcastGameState
       p.score = toPercent(room.game.roundBase[sid] || 0, room.game.roundBaseAttempts[sid] || 0);
     });
     broadcastGameState();
-  io.to(roomId).emit('SERVER:GAME_START', { roomId, creatorId: room.game.creatorId, phase: 'create', endsAt: room.game.endsAt, roundIndex: room.game.roundIndex, totalRounds: room.game.order.length, mode: room.game.mode });
+  io.to(roomId).emit('SERVER:GAME_START', {
+      roomId,
+      creatorId: room.game.creatorId,
+      phase: 'create',
+      endsAt: room.game.endsAt,
+      currentRound: room.game.currentRound,
+      totalRounds: room.game.numRounds,
+      currentTurn: room.game.currentTurn,
+      totalTurns: room.game.totalTurns,
+      mode: room.game.mode
+    });
     clearTimeout(room.game.tCreate);
     room.game.tCreate = setTimeout(() => startPlaybackPhase(roomId), 10000);
   };
@@ -126,15 +162,54 @@ export const makeGameApi = ({ getPlayersState, broadcastRoom, broadcastGameState
         rows.push({ userId, correct: room.game.scores[sid], attempts: room.game.attempts[sid], percent: p.score, nickname: getPlayersState()[sid]?.nickname || '' });
       }
     });
-    if (persistResults && rows.length > 0) persistResults(rows);
+
+    // Check if game is over (all turns completed)
+    const isGameOver = (room.game.currentTurn + 1 >= room.game.totalTurns);
+
+    // CRITICAL FIX: Only persist results at game end, not every turn
+    if (isGameOver && persistResults && rows.length > 0) {
+      persistResults(rows);
+    }
+
     broadcastGameState();
-    if (room.game.roundIndex + 1 < room.game.order.length) {
-      room.game.roundIndex += 1;
-      room.game.phase = 'ended';
-      io.to(roomId).emit('SERVER:PHASE', { roomId, phase: 'ended' });
-      setTimeout(() => startCreatePhase(roomId), 1000);
+
+    // Check if we should continue or end the game
+    if (!isGameOver) {
+      room.game.currentTurn += 1;
+
+      // Check if we just completed a round (all players had a turn)
+      const justCompletedRound = (room.game.currentTurn % room.game.order.length === 0);
+
+      if (justCompletedRound && room.game.currentRound < room.game.numRounds) {
+        // Show round summary
+        room.game.phase = 'round_summary';
+        const roundResults = room.game.order.map((sid) => ({
+          id: sid,
+          nickname: getPlayersState()[sid]?.nickname || null,
+          score: toPercent(room.game.scores[sid] || 0, room.game.attempts?.[sid] || 0),
+        }));
+        io.to(roomId).emit('SERVER:ROUND_SUMMARY', {
+          roomId,
+          roundCompleted: room.game.currentRound,
+          totalRounds: room.game.numRounds,
+          results: roundResults
+        });
+        // 3-second pause before next round
+        setTimeout(() => {
+          room.game.phase = 'ended';
+          io.to(roomId).emit('SERVER:PHASE', { roomId, phase: 'ended' });
+          setTimeout(() => startCreatePhase(roomId), 1000);
+        }, 3000);
+      } else {
+        // Continue to next turn within same round
+        room.game.phase = 'ended';
+        io.to(roomId).emit('SERVER:PHASE', { roomId, phase: 'ended' });
+        setTimeout(() => startCreatePhase(roomId), 1000);
+      }
       return;
     }
+
+    // Game over - all turns completed
     const results = room.game.order.map((sid) => ({
       id: sid,
       nickname: getPlayersState()[sid]?.nickname || null,

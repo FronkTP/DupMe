@@ -298,8 +298,8 @@ io.on('connection', (socket) => {
 
   // Rooms: create / join / leave
   socket.on('ROOMS:CREATE', (payload = {}) => {
-    const { name, capacity, mode } = (typeof payload === 'object' && payload) ? payload : {};
-    const id = createRoom({ name, capacity, mode });
+    const { name, capacity, mode, numRounds } = (typeof payload === 'object' && payload) ? payload : {};
+    const id = createRoom({ name, capacity, mode, numRounds });
     broadcastRooms();
     joinRoom(socket, id);
   });
@@ -522,8 +522,10 @@ app.get('/admin/rooms', requireAdminToken, (req, res) => {
     mode: room.mode || 'classic',
     game: room.game ? {
       phase: room.game.phase,
-      round: room.game.roundIndex + 1,
-      totalRounds: room.game.order?.length || 0,
+      round: room.game.currentRound || 1,
+      totalRounds: room.game.numRounds || 1,
+      turn: (room.game.currentTurn || 0) + 1,
+      totalTurns: room.game.totalTurns || room.game.order?.length || 0,
       creatorId: room.game.creatorId,
       patternLength: room.game.pattern?.length || 0,
     } : null,

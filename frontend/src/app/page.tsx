@@ -78,12 +78,13 @@ export default function Home() {
 
   // In-room status
   const [roomBanner, setRoomBanner] = useState<string>("");
-  const [phase, setPhase] = useState<'idle'|'demo'|'create'|'playback'|'replicate'|'ended'|'game_over'|'practice'|null>(null);
+  const [phase, setPhase] = useState<'idle'|'demo'|'create'|'playback'|'replicate'|'ended'|'game_over'|'practice'|'round_summary'|null>(null);
   const [creatorId, setCreatorId] = useState<string | null>(null);
   const [replicatePattern, setReplicatePattern] = useState<string[]>([]);
   const [roomMode, setRoomMode] = useState<'classic'|'perfect'|'reverse'|'practice'>('classic');
   const [results, setResults] = useState<Array<{ id: string; nickname: string | null; score: number }> | null>(null);
   const [winnerOverlayOpen, setWinnerOverlayOpen] = useState<boolean>(false);
+  const [roundSummary, setRoundSummary] = useState<{ roundCompleted: number; totalRounds: number; results: Array<{ id: string; nickname: string | null; score: number }> } | null>(null);
   const [phaseEndsAt, setPhaseEndsAt] = useState<number | null>(null);
   const [phaseStartAt, setPhaseStartAt] = useState<number | null>(null);
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
@@ -142,6 +143,10 @@ export default function Home() {
   };
 
   // GSAP Page Transitions - Premium, effortless fade + subtle scale
+  // Track whether we've already animated the room transition to prevent re-animating on every state update
+  const hasAnimatedRoomRef = useRef<boolean>(false);
+  const previousRoomIdRef = useRef<string | null>(null);
+
   useEffect(() => {
     // Transition: Nickname → Lobby (when hasNick becomes true and no room)
     if (hasNick && !room && lobbyContainerRef.current) {
@@ -151,16 +156,25 @@ export default function Home() {
         { opacity: 0, scale: 0.97 },
         { opacity: 1, scale: 1, duration: 0.5, ease: 'power2.out' }
       );
+      // Reset room animation flag when returning to lobby
+      hasAnimatedRoomRef.current = false;
+      previousRoomIdRef.current = null;
     }
 
     // Transition: Lobby → Game Room (when room becomes truthy)
+    // Only animate if: (1) we haven't animated yet, OR (2) we're joining a different room
     if (hasNick && room && roomContainerRef.current) {
-      // Subtle fade in with gentle scale
-      gsap.fromTo(
-        roomContainerRef.current,
-        { opacity: 0, scale: 0.97 },
-        { opacity: 1, scale: 1, duration: 0.5, ease: 'power2.out' }
-      );
+      const isNewRoom = previousRoomIdRef.current !== room.id;
+      if (!hasAnimatedRoomRef.current || isNewRoom) {
+        // Subtle fade in with gentle scale
+        gsap.fromTo(
+          roomContainerRef.current,
+          { opacity: 0, scale: 0.97 },
+          { opacity: 1, scale: 1, duration: 0.5, ease: 'power2.out' }
+        );
+        hasAnimatedRoomRef.current = true;
+        previousRoomIdRef.current = room.id;
+      }
     }
   }, [hasNick, room]);
 
@@ -237,10 +251,10 @@ export default function Home() {
       setReplicatePattern([]);
       setResults(null);
     });
-    type GameStartPayload = { roomId: string; creatorId?: string; phase?: 'create'; endsAt?: number; roundIndex?: number; totalRounds?: number; mode?: 'classic'|'perfect'|'reverse' };
-    type PhasePayload = { roomId: string; phase?: 'demo'|'create'|'playback'|'replicate'|'ended'|'game_over'|'practice'; creatorId?: string; endsAt?: number; pattern?: string[]; sequence?: string[]; noteMs?: number; gapMs?: number; results?: Array<{ id: string; nickname: string | null; score: number }>; mode?: 'classic'|'perfect'|'reverse'|'practice' } ;
+    type GameStartPayload = { roomId: string; creatorId?: string; phase?: 'create'; endsAt?: number; currentRound?: number; totalRounds?: number; currentTurn?: number; totalTurns?: number; mode?: 'classic'|'perfect'|'reverse' };
+    type PhasePayload = { roomId: string; phase?: 'demo'|'create'|'playback'|'replicate'|'ended'|'game_over'|'practice'|'round_summary'; creatorId?: string; endsAt?: number; pattern?: string[]; sequence?: string[]; noteMs?: number; gapMs?: number; results?: Array<{ id: string; nickname: string | null; score: number }>; mode?: 'classic'|'perfect'|'reverse'|'practice' } ;
     newSocket.on('SERVER:GAME_START', (p: GameStartPayload) => {
-      setRoomBanner(`Round ${((p?.roundIndex ?? 0) + 1)}/${p?.totalRounds ?? ''} • Create phase: start playing notes`);
+      setRoomBanner(`Round ${p?.currentRound ?? 1}/${p?.totalRounds ?? 1} · Turn ${((p?.currentTurn ?? 0) + 1)}/${p?.totalTurns ?? 1} • Create phase: start playing notes`);
       setPhase('create');
       setCreatorId(p?.creatorId ?? null);
       setReplicatePattern([]);
@@ -288,6 +302,19 @@ export default function Home() {
       if (p?.phase === 'ended') { setReplicatePattern([]); if (p?.results) setResults(p.results); }
       setPhaseEndsAt(typeof p?.endsAt === 'number' ? p.endsAt : null);
       setPhaseStartAt(typeof p?.endsAt === 'number' ? Date.now() : null);
+    });
+    newSocket.on('SERVER:ROUND_SUMMARY', (payload: { roomId: string; roundCompleted: number; totalRounds: number; results: Array<{ id: string; nickname: string | null; score: number }> }) => {
+      setPhase('round_summary');
+      setRoundSummary({
+        roundCompleted: payload.roundCompleted,
+        totalRounds: payload.totalRounds,
+        results: payload.results || []
+      });
+      setRoomBanner(`Round ${payload.roundCompleted} Complete!`);
+      // Auto-dismiss after 3 seconds
+      setTimeout(() => {
+        setRoundSummary(null);
+      }, 3000);
     });
     newSocket.on('SERVER:GAME_END', (payload: { roomId: string; results: Array<{ id: string; nickname: string | null; score: number }> }) => {
       setPhase('game_over');
@@ -536,7 +563,7 @@ export default function Home() {
   }, [socket, nickname, userId, avatar]);
 
   // Lobby actions
-  const createRoom = (name: string, capacity: number, mode: 'classic'|'perfect'|'reverse'|'practice'|'ai' = 'classic') => {
+  const createRoom = (name: string, capacity: number, mode: 'classic'|'perfect'|'reverse'|'practice'|'ai' = 'classic', numRounds: number = 1) => {
     if (!socket) return;
     // Ensure we left any previous room on the server to avoid race/linger issues
     const ensureLeft = () => new Promise<void>((resolve) => {
@@ -549,7 +576,7 @@ export default function Home() {
       // trigger leave if we think we're in a room
       socket.emit('ROOMS:LEAVE');
     });
-    void ensureLeft().then(() => socket.emit('ROOMS:CREATE', { name, capacity, mode }));
+    void ensureLeft().then(() => socket.emit('ROOMS:CREATE', { name, capacity, mode, numRounds }));
   };
 
   const joinRoom = (id: string) : void => {
@@ -878,6 +905,35 @@ export default function Home() {
       >
         <span className="font-inter">Server Management</span>
       </button>
+
+      {/* Round Summary Modal */}
+      {roundSummary && phase === 'round_summary' && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-surface border border-theme rounded-3xl p-6 w-[90vw] max-w-md backdrop-blur-xl animate-fade-in" style={{ boxShadow: 'var(--elev-shadow)' }}>
+            <h2 className="text-2xl font-bold mb-2">Round {roundSummary.roundCompleted} Complete!</h2>
+            <p className="text-sm text-muted mb-4">
+              Current standings after {roundSummary.roundCompleted} of {roundSummary.totalRounds} rounds
+            </p>
+            <div className="space-y-2 mb-4">
+              {roundSummary.results
+                .sort((a, b) => b.score - a.score)
+                .map((player, idx) => (
+                  <div
+                    key={player.id}
+                    className="flex items-center justify-between p-3 rounded-xl bg-surface-muted border border-theme"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-lg font-bold text-muted">#{idx + 1}</span>
+                      <span className="font-medium">{player.nickname || 'Anonymous'}</span>
+                    </div>
+                    <span className="text-lg font-bold">{player.score}%</span>
+                  </div>
+                ))}
+            </div>
+            <p className="text-xs text-muted text-center">Next round starting in 3 seconds...</p>
+          </div>
+        </div>
+      )}
 
       {/* Admin Password Modal */}
       {showAdminModal && (

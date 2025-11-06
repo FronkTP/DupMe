@@ -8,7 +8,7 @@ type RoomListItem = { id: string; name: string; capacity: number; count: number 
 
 type LobbyProps = {
   rooms: RoomListItem[];
-  onCreate: (name: string, capacity: number, mode: 'classic' | 'perfect' | 'reverse' | 'practice' | 'ai') => void;
+  onCreate: (name: string, capacity: number, mode: 'classic' | 'perfect' | 'reverse' | 'practice' | 'ai', numRounds: number) => void;
   onJoin: (id: string) => void;
 };
 
@@ -17,6 +17,7 @@ export default function Lobby({ rooms, onCreate, onJoin }: LobbyProps) {
   const [selectedMode, setSelectedMode] = useState<'classic' | 'perfect' | 'reverse' | 'practice' | 'ai'>('classic');
   const nameId = useId();
   const capId = useId();
+  const roundsId = useId();
   const configRef = useRef<HTMLDivElement>(null);
   // const modeId = useId();
 
@@ -107,9 +108,11 @@ export default function Lobby({ rooms, onCreate, onJoin }: LobbyProps) {
             onClick={() => {
               const nameEl = document.getElementById(nameId) as HTMLInputElement | null;
               const capEl = document.getElementById(capId) as HTMLSelectElement | null;
+              const roundsEl = document.getElementById(roundsId) as HTMLSelectElement | null;
               const name = nameEl?.value || "";
               const cap = Number(capEl?.value || 2);
-              onCreate(name, cap, selectedMode);
+              const rounds = Number(roundsEl?.value || 1);
+              onCreate(name, cap, selectedMode, rounds);
             }}
           >Create</button>
         </div>
@@ -126,6 +129,26 @@ export default function Lobby({ rooms, onCreate, onJoin }: LobbyProps) {
                 aria-label="Capacity"
               >
                 {Array.from({ length: 11 }, (_, i) => i + 2).map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-muted">
+                <ChevronDown size={16} />
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center justify-between w-full mb-4">
+            <label className="text-muted text-sm">Number of Rounds</label>
+            <div className="relative w-15">
+              <select
+                id={roundsId}
+                defaultValue={1}
+                className="w-full focus:ring-1 focus:ring-neutral-300 px-3 py-2 pr-9 rounded-lg control border appearance-none"
+                aria-label="Number of Rounds"
+              >
+                {[1, 2, 3, 4, 5].map((n) => (
                   <option key={n} value={n}>
                     {n}
                   </option>
