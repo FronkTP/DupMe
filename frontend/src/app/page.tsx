@@ -251,6 +251,7 @@ export default function Home() {
       if (p?.phase === 'replicate') {
         if (p?.mode === 'reverse') setReplicatePattern((p?.pattern || []).slice().reverse());
         else setReplicatePattern(p?.pattern || []);
+        replicateLocalIndexRef.current = 0;
       }
       if (p?.phase === 'ended') { setReplicatePattern([]); if (p?.results) setResults(p.results); }
       setPhaseEndsAt(typeof p?.endsAt === 'number' ? p.endsAt : null);

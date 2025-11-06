@@ -11,6 +11,13 @@ export const makeGameApi = ({ getPlayersState, broadcastRoom, broadcastGameState
     room.ready = {};
     const currentPlayers = Object.keys(room.players);
     const order = (room.joinOrder || []).filter((id) => currentPlayers.includes(id));
+
+    // Randomize turn order using Fisher-Yates shuffle
+    for (let i = order.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [order[i], order[j]] = [order[j], order[i]];
+    }
+
     const scores = {}; const attempts = {};
     order.forEach((sid) => { scores[sid] = 0; attempts[sid] = 0; const p = getPlayersState()[sid]; if (p) p.score = 0; });
     // inherit room mode (default to classic)
@@ -86,6 +93,7 @@ export const makeGameApi = ({ getPlayersState, broadcastRoom, broadcastGameState
     if (!room || !room.game) return;
     room.game.phase = 'replicate';
     room.game.submissions = {};
+    room.game.rejected = {};
     room.game.endsAt = Date.now() + 15000;
   io.to(roomId).emit('SERVER:PHASE', { roomId, phase: 'replicate', creatorId: room.game.creatorId, endsAt: room.game.endsAt, pattern: room.game.pattern, mode: room.game.mode });
     clearTimeout(room.game.tReplicate);
