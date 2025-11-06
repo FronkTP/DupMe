@@ -31,8 +31,8 @@ app.get('/health', (_req, res) => res.status(200).send('ok'));
 // --- Admin Authentication System ---
 import crypto from 'crypto';
 
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin456';
-const ADMIN_READ_PASSWORD = process.env.ADMIN_READ_PASSWORD || 'viewer123';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'iseedeadpeople';
+const ADMIN_READ_PASSWORD = process.env.ADMIN_READ_PASSWORD || 'thaidog';
 const adminTokens = new Map(); // token -> { mode, expiresAt }
 
 // Validate password and issue token
